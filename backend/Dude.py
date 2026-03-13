@@ -50,13 +50,13 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 class UnifiedMediaAnalyzer:
     RESOLUTION_MAP = [
-        (3840, 2160, "4K UHD", 8.5, 10.0),    # Changed from 85, 100
-        (2560, 1440, "1440p (QHD)", 7.0, 8.5), # Changed from 70, 85
-        (1920, 1080, "1080p (FHD)", 5.5, 7.0), # Changed from 55, 70
-        (1280, 720, "720p (HD)", 4.0, 5.5),    # Changed from 40, 55
-        (854, 480, "480p (SD)", 2.5, 4.0),     # Changed from 25, 40
-        (640, 360, "360p (LD)", 1.0, 2.5),     # Changed from 10, 25
-        (0, 0, "Unknown/Very Low Res", 0, 1.0), # Changed from 0, 10
+        (3840, 2160, "4K UHD", 9.0, 10.0),
+        (2560, 1440, "1440p (QHD)", 8.5, 9.5),
+        (1920, 1080, "1080p (FHD)", 7.5, 9.2), # Increased from 7.0 max
+        (1280, 720, "720p (HD)", 6.0, 8.0),   # Increased from 5.5 max
+        (854, 480, "480p (SD)", 4.0, 6.0),
+        (640, 360, "360p (LD)", 2.0, 4.0),
+        (0, 0, "Unknown/Very Low Res", 0, 2.0),
     ]
     SHAKE_TOLERANCE_PX = 1.5
     NOISE_THRESHOLD_STD = 8
@@ -198,6 +198,37 @@ class UnifiedMediaAnalyzer:
                             if phone_match:
                                 metadata["phone"] = phone_match.group(1)
 
+            # --- ENHANCED: Extract Star Rating and Feedback ---
+            # 1. Look for rating data attributes
+            rating_elem = soup.find(attrs={"data-rating": True})
+            if rating_elem:
+                try:
+                    metadata["star_rating"] = float(rating_elem["data-rating"])
+                except: pass
+            
+            # 2. Look for star icons or specific classes
+            if "star_rating" not in metadata:
+                stars = soup.select('.star-rating .active, .stars .filled, [class*="star-filled"], [class*="star-active"]')
+                if stars:
+                    metadata["star_rating"] = float(len(stars))
+                else:
+                    # Look for aria-label="X stars"
+                    star_aria = soup.find(attrs={"aria-label": re.compile(r"(\d+)\s+stars?", re.I)})
+                    if star_aria:
+                        m = re.search(r"(\d+)", star_aria["aria-label"])
+                        if m: metadata["star_rating"] = float(m.group(1))
+
+            # 3. Regex search for "X stars" or "Rating: X"
+            if "star_rating" not in metadata:
+                rating_match = re.search(r"(?:Rating|Stars)[\s:]*([0-5](?:\.\d)?)\s*(?:\/\s*5)?", page_text, re.I)
+                if rating_match:
+                    metadata["star_rating"] = float(rating_match.group(1))
+
+            # 4. Extract customer comments/feedback
+            feedback_match = re.search(r"(?:Comment|Feedback|Message)[\s:]*(.*)", page_text, re.I)
+            if feedback_match:
+                metadata["customer_feedback"] = feedback_match.group(1).strip()
+
             # Fallback: regex search in full plain text
             if not metadata["service_advisor"]:
                 advisor_match = re.search(r"(?:Technician|Service Advisor)[\s:]*([A-Za-z]+(?:,?\s+[A-Za-z]+)*)", page_text, re.IGNORECASE)
@@ -229,7 +260,7 @@ class UnifiedMediaAnalyzer:
             if video_url:
                 metadata["video_url"] = video_url
 
-            print("✅ Metadata extracted successfully!")
+            print("✅ Metadata extracted successfully (including possible ratings)!")
             return metadata
         except Exception as e:
             print(f"⚠️ Error extracting metadata: {e}")
@@ -880,12 +911,16 @@ class UnifiedMediaAnalyzer:
             saturation_avg = np.mean(saturation_clean) if len(saturation_clean) > 0 else 0
             blockiness_avg = np.mean(blockiness_clean) if len(blockiness_clean) > 0 else 0
             
-            # Enhanced scoring with better normalization
-            sharpness_score = np.clip((sharpness_avg - 10) / (200 - 10) * 100, 0, 100)
-            brightness_score = np.clip(100 - abs(brightness_avg - 127) / 64 * 100, 0, 100)
-            contrast_score = np.clip((contrast_avg - 15) / (80 - 15) * 100, 0, 100)
-            color_score = np.clip((saturation_avg - 30) / (100 - 30) * 100, 0, 100)
-            compression_score = np.clip(100 - (blockiness_avg * 200), 0, 100)
+            # Enhanced scoring with better normalization (Relaxed for real-world footage)
+            # Sharpness: Laplacian var of 100+ is excellent for compressed video
+            sharpness_score = np.clip((sharpness_avg - 5) / (120 - 5) * 100, 0, 100)
+            # Brightness: More forgiving range (80-180 is generally fine)
+            brightness_score = np.clip(100 - abs(brightness_avg - 127) / 80 * 100, 0, 100)
+            # Contrast: std dev of 40+ is very high contrast
+            contrast_score = np.clip((contrast_avg - 10) / (60 - 10) * 100, 0, 100)
+            # Color: saturation of 60+ is quite vibrant
+            color_score = np.clip((saturation_avg - 20) / (80 - 20) * 100, 0, 100)
+            compression_score = np.clip(100 - (blockiness_avg * 150), 0, 100)
             
             # Motion consistency score
             if motion_changes:
@@ -949,22 +984,28 @@ class UnifiedMediaAnalyzer:
             elif frozen_ratio > 0.15:
                 issues.append("Some frozen frames")
             
-            # Calculate overall score with enhanced weights (0-10 scale)
+            # Calculate overall score with proper scale (Out of 10)
             resolution_base = (min_res_score + max_res_score) / 2
             
-            visual_score = (
-                sharpness_score * 0.30 +
-                brightness_score * 0.20 +
+            # visual_score is 0-100, convert it to 0-10 internally for weighted sum
+            visual_score_o10 = (
+                sharpness_score * 0.35 +
+                brightness_score * 0.15 +
                 contrast_score * 0.15 +
-                noise_score * 0.15 +
-                shake_score * 0.05 +
+                noise_score * 0.10 +
+                shake_score * 0.10 +
                 color_score * 0.05 +
                 compression_score * 0.05 +
                 motion_score * 0.05
-            )
+            ) / 10
             
-            final_score = (resolution_base * 0.25 + visual_score * 0.75) / 10  # Convert to 0-10
-            final_score = np.clip(final_score - (frozen_penalty / 10), 0, 10)  # Scale penalty too
+            # Final score is a weighted average of Resolution and Visual Quality
+            final_score = (resolution_base * 0.3) + (visual_score_o10 * 0.7)
+            final_score = np.clip(final_score - (frozen_penalty / 20), 0, 10) 
+            
+            # Bonus for high-res clear videos
+            if res_label in ["4K UHD", "1440p (QHD)", "1080p (FHD)"] and visual_score_o10 > 8.5:
+                final_score = min(10.0, final_score + 0.5)
             
             # Enhanced shake level classification (internal scores still 0-100)
             if shake_score >= 85:
@@ -1075,10 +1116,10 @@ class UnifiedMediaAnalyzer:
             avg_shake_px = total_displacement / frame_pairs
             shake_variance = np.std(displacements) if len(displacements) > 1 else 0
             
-            # More sophisticated shake scoring
-            base_score = 100 - (avg_shake_px / self.SHAKE_TOLERANCE_PX) * 50
-            variance_penalty = min(shake_variance * 10, 20)
-            max_shake_penalty = min(max_displacement * 5, 15)
+            # Relaxed shake scoring for handheld devices
+            base_score = 100 - (avg_shake_px / (self.SHAKE_TOLERANCE_PX * 2.5)) * 50
+            variance_penalty = min(shake_variance * 5, 15)
+            max_shake_penalty = min(max_displacement * 3, 10)
             
             shake_score = max(0, base_score - variance_penalty - max_shake_penalty)
             shake_score = np.clip(shake_score, 0, 100)
@@ -1140,8 +1181,8 @@ class UnifiedMediaAnalyzer:
         except Exception as e:
             return 50.0, f"Noise analysis error: {e}"
         
-    def calculate_overall_quality(self, audio_analysis, video_analysis):
-        """Calculate overall quality out of 10 with equal importance for audio and video"""
+    def calculate_overall_quality(self, audio_analysis, video_analysis, citnow_metadata=None):
+        """Calculate overall quality out of 10 with equal importance for audio and video, blending with CitNow rating if available"""
         try:
             audio_score = audio_analysis.get('score', 0)
             video_score = video_analysis.get('quality_score', 0)
@@ -1150,29 +1191,47 @@ class UnifiedMediaAnalyzer:
             audio_weight = 0.5
             video_weight = 0.5
             
-            overall_score = (audio_score * audio_weight) + (video_score * video_weight)
+            overall_technical_score = (audio_score * audio_weight) + (video_score * video_weight)
+            
+            # BLEND WITH REAL RATING (Star Rating from 1-5 to 0-10)
+            star_rating = None
+            if citnow_metadata:
+                star_rating = citnow_metadata.get('star_rating')
+            
+            final_overall_score = overall_technical_score
+            has_real_rating = False
+            
+            if star_rating is not None:
+                # Map 1-5 stars to 0-10 score (1->2, 5->10)
+                real_score = star_rating * 2.0
+                # Blend: 60% real rating, 40% technical. This makes it "trace real"
+                final_overall_score = (real_score * 0.6) + (overall_technical_score * 0.4)
+                has_real_rating = True
             
             # Quality labels for 0–10 range
-            if overall_score >= 9:
+            if final_overall_score >= 9:
                 overall_label = "Excellent"
-            elif overall_score >= 8:
+            elif final_overall_score >= 8:
                 overall_label = "Very Good"
-            elif overall_score >= 7:
+            elif final_overall_score >= 7:
                 overall_label = "Good"
-            elif overall_score >= 6:
+            elif final_overall_score >= 6:
                 overall_label = "Fair"
-            elif overall_score >= 5:
+            elif final_overall_score >= 5:
                 overall_label = "Poor"
-            elif overall_score >= 3:
+            elif final_overall_score >= 3:
                 overall_label = "Very Poor"
             else:
                 overall_label = "Unusable"
             
             return {
-                "overall_score": round(overall_score, 1),
+                "overall_score": round(final_overall_score, 1),
                 "overall_label": overall_label,
                 "audio_contribution": round(audio_score * audio_weight, 1),
                 "video_contribution": round(video_score * video_weight, 1),
+                "technical_score": round(overall_technical_score, 1),
+                "real_rating_score": round(star_rating * 2, 1) if star_rating is not None else None,
+                "has_real_rating": has_real_rating,
                 "breakdown": {
                     "audio_quality": round(audio_score, 1),
                     "video_quality": round(video_score, 1)
@@ -1573,7 +1632,18 @@ class UnifiedMediaAnalyzer:
 
             print("\n🎥 ANALYZING VIDEO QUALITY")
             print("-" * 40)
-            results["video_analysis"] = self.analyze_video_quality(video_path)
+            video_analysis = self.analyze_video_quality(video_path)
+            
+            # Blend Video Quality score with real rating if available
+            star_rating = results.get("citnow_metadata", {}).get("star_rating")
+            if star_rating is not None:
+                real_score = star_rating * 2.0
+                # Blend 50/50 for individual component to keep technical value but align with real rating
+                video_analysis["quality_score"] = round((real_score * 0.5) + (video_analysis["quality_score"] * 0.5), 1)
+                video_analysis["quality_label"] = self._get_quality_label(video_analysis["quality_score"])
+                print(f"⚖️ Adjusted Video Quality with Star Rating ({star_rating}★)")
+
+            results["video_analysis"] = video_analysis
             results["processing_steps"].append("video_quality_analysis")
             print(f"Quality: {results['video_analysis']['quality_label']} ({results['video_analysis']['quality_score']:.1f}/10)")
 
@@ -1585,7 +1655,11 @@ class UnifiedMediaAnalyzer:
 
             print("\n📊 CALCULATING OVERALL QUALITY")
             print("-" * 40)
-            overall_quality = self.calculate_overall_quality(results["audio_analysis"], results["video_analysis"])
+            overall_quality = self.calculate_overall_quality(
+                results["audio_analysis"], 
+                results["video_analysis"],
+                citnow_metadata=results.get("citnow_metadata")
+            )
             results["overall_quality"] = overall_quality
             results["processing_steps"].append("overall_quality_assessment")
             print(f"Overall Quality: {overall_quality['overall_label']} ({overall_quality['overall_score']:.1f}/10)")

@@ -82,24 +82,24 @@ const ROLE_ACCESS = {
     { text: 'Dealer Network', path: '/super-admin/dealers', icon: Business }
   ],
   dealer_admin: [
-    { text: 'Dashboard', path: '/dealer/dashboard', icon: SpaceDashboard },
+    { text: 'Top Dashboard', path: '/dealer/dashboard', icon: SpaceDashboard },
     { text: 'New Analysis', path: '/dealer/new', icon: AddToQueue },
     { text: 'Bulk Upload', path: '/dealer/bulk', icon: UploadFile },
-    { text: 'Results', path: '/dealer/results', icon: Assessment },
-    { text: 'Team Management', path: '/dealer/users', icon: ManageAccounts }
+    { text: 'Result', path: '/dealer/results', icon: Assessment },
+    { text: 'Team Mgmt', path: '/dealer/users', icon: ManageAccounts }
   ],
   branch_admin: [
-    { text: 'Dashboard', path: '/dealer/dashboard', icon: SpaceDashboard },
+    { text: 'Top Dashboard', path: '/dealer/dashboard', icon: SpaceDashboard },
     { text: 'New Analysis', path: '/dealer/new', icon: AddToQueue },
     { text: 'Bulk Upload', path: '/dealer/bulk', icon: UploadFile },
-    { text: 'Results', path: '/dealer/results', icon: Assessment },
-    { text: 'Team Management', path: '/dealer/users', icon: ManageAccounts }
+    { text: 'Result', path: '/dealer/results', icon: Assessment },
+    { text: 'Team Mgmt', path: '/dealer/users', icon: ManageAccounts }
   ],
   dealer_user: [
-    { text: 'Dashboard', path: '/dealer/dashboard', icon: SpaceDashboard },
+    { text: 'Top Dashboard', path: '/dealer/dashboard', icon: SpaceDashboard },
     { text: 'New Analysis', path: '/dealer/new', icon: AddToQueue },
     { text: 'Bulk Upload', path: '/dealer/bulk', icon: UploadFile },
-    { text: 'Results', path: '/dealer/results', icon: Assessment }
+    { text: 'Result', path: '/dealer/results', icon: Assessment }
   ],
 };
 
@@ -122,136 +122,20 @@ export default function Navbar() {
   const { tasks } = useTasks(); // Access global tasks
   const location = useLocation();
   const navigate = useNavigate();
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+  const isActive = (p) => location.pathname.startsWith(p);
 
   const [userAnchor, setUserAnchor] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
-  const [editBoxOpen, setEditBoxOpen] = useState(false);
-  const [editForm, setEditForm] = useState({
-    username: '',
-    email: '',
-    newPassword: '',
-    confirmPassword: ''
-  });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 
-  const theme = useTheme();
-  const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
-  const isActive = (p) => location.pathname.startsWith(p);
   const toggleDrawer = () => setDrawerOpen(!drawerOpen);
   const openUserMenu = (e) => setUserAnchor(e.currentTarget);
   const closeUserMenu = () => setUserAnchor(null);
 
-  const handleClickShowPassword = () => setShowPassword((show) => !show);
-  const handleClickShowConfirmPassword = () => setShowConfirmPassword((show) => !show);
-
   const handleEditClick = () => {
-    setEditForm({
-      username: user?.username || '',
-      email: user?.email || '',
-      newPassword: '',
-      confirmPassword: ''
-    });
-    setError('');
-    setSuccess('');
-    setEditBoxOpen(true);
+    navigate('/account/profile');
     closeUserMenu();
-  };
-
-  const handleEditChange = (field) => (e) => {
-    setEditForm(prev => ({
-      ...prev,
-      [field]: e.target.value
-    }));
-    // Clear errors when user starts typing
-    if (error) setError('');
-    if (success) setSuccess('');
-  };
-
-  const handleSaveProfile = async () => {
-    // Validation
-    if (!editForm.username.trim()) {
-      setError('Username is required');
-      return;
-    }
-
-    if (!editForm.email.trim()) {
-      setError('Email is required');
-      return;
-    }
-
-    // Email validation
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(editForm.email)) {
-      setError('Please enter a valid email address');
-      return;
-    }
-
-    // Password validation if passwords are provided
-    if (editForm.newPassword || editForm.confirmPassword) {
-      if (editForm.newPassword !== editForm.confirmPassword) {
-        setError('New passwords do not match');
-        return;
-      }
-
-      if (editForm.newPassword.length < 6) {
-        setError('New password must be at least 6 characters long');
-        return;
-      }
-    }
-
-    setLoading(true);
-    setError('');
-    setSuccess('');
-
-    try {
-      const updateData = {
-        username: editForm.username.trim(),
-        email: editForm.email.trim(),
-      };
-
-      // Only include new password if provided
-      if (editForm.newPassword) {
-        updateData.new_password = editForm.newPassword;
-      }
-
-      await updateProfile(updateData);
-
-      setSuccess('Profile updated successfully!');
-
-      // Close box after success message
-      setTimeout(() => {
-        setEditBoxOpen(false);
-        setEditForm({
-          username: '',
-          email: '',
-          newPassword: '',
-          confirmPassword: ''
-        });
-        setSuccess('');
-      }, 1500);
-
-    } catch (err) {
-      setError(err.message || 'Failed to update profile. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCancelEdit = () => {
-    setEditBoxOpen(false);
-    setEditForm({
-      username: '',
-      email: '',
-      newPassword: '',
-      confirmPassword: ''
-    });
-    setError('');
-    setSuccess('');
   };
 
   // Mobile drawer content
@@ -355,7 +239,9 @@ export default function Navbar() {
         sx={{
           background: BMW.white,
           borderBottom: `1px solid ${BMW.border}`,
-          zIndex: theme.zIndex.drawer + 1
+          zIndex: theme.zIndex.drawer + 1,
+          width: { md: `calc(100% - 240px)` },
+          ml: { md: `240px` }
         }}
       >
         <Toolbar sx={{
@@ -363,7 +249,7 @@ export default function Navbar() {
           minHeight: { xs: '64px', sm: '72px' },
           px: { xs: 2, sm: 3 }
         }}>
-          {/* Left: Logo + Menu */}
+          {/* Left: Menu Toggle (Mobile Only) */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
             {isMobile && (
               <IconButton
@@ -376,82 +262,18 @@ export default function Navbar() {
                 <MenuIcon />
               </IconButton>
             )}
-
-            {/* Logo */}
-            <Box
-              component={RouterLink}
-              to="/"
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1.5,
-                textDecoration: 'none'
-              }}
-            >
-              <Box
-                sx={{
-                  height: 40,
-                  width: 40,
-                  bgcolor: BMW.primary,
-                  borderRadius: 1.5,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'white'
-                }}
-              >
-                <SmartDisplay />
-              </Box>
-              <Box>
-                <Typography
-                  variant="h6"
-                  sx={{
-                    fontWeight: 700,
-                    color: BMW.primary,
-                    display: { xs: 'block', sm: 'block' },
-                    lineHeight: 1.2
-                  }}
-                >
-                  {/* ✅ DYNAMIC: Show CITNOW for super_admin, showroom name for dealer_admin */}
-                  {role === 'super_admin' ? 'FOCUS' : (user?.username || 'Dealer Portal')}
-                </Typography>
-                {(role === 'dealer_admin' || role === 'branch_admin') && user?.showroom_name && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: BMW.textSecondary,
-                      display: { xs: 'none', sm: 'block' },
-                      fontWeight: 500
-                    }}
-                  >
-                    {user?.showroom_name || 'Powered by Focus'}
-                  </Typography>
-                )}
-              </Box>
-            </Box>
           </Box>
 
-          {/* Center: Desktop Navigation */}
+          {/* Center: Desktop Navigation - NOW REMOVED (Horizontal items are in Sidebar) */}
           {!isMobile && (
-            <Box sx={{
-              display: 'flex',
-              gap: 0.5,
-              background: 'rgba(0,0,0,0.03)',
-              borderRadius: 50,
-              p: 0.75,
-              border: `1px solid ${BMW.border}`,
-              backdropFilter: 'blur(10px)'
-            }}>
-              {(ROLE_ACCESS[role] || []).map(({ text, path, icon: Icon }) => (
-                <NavButton
-                  key={path}
-                  to={path}
-                  active={isActive(path)}
-                  icon={Icon}
-                >
-                  {text}
-                </NavButton>
-              ))}
+            <Box sx={{ flexGrow: 1, ml: 4 }}>
+               <Typography variant="h6" sx={{ 
+                 fontWeight: 700, 
+                 color: BMW.textPrimary,
+                 letterSpacing: '-0.5px'
+               }}>
+                 {ROLE_ACCESS[role]?.find(m => isActive(m.path))?.text || 'CitNow Analyzer'}
+               </Typography>
             </Box>
           )}
 
@@ -607,210 +429,7 @@ export default function Navbar() {
         </MenuItem>
       </Menu>
 
-      {/* Compact Edit Profile Box (Top-Right Corner) */}
-      <Dialog
-        open={editBoxOpen}
-        onClose={handleCancelEdit}
-        maxWidth="sm"
-        fullWidth
-        TransitionComponent={Fade}
-        BackdropProps={{
-          sx: {
-            backgroundColor: 'rgba(255, 255, 255, 0.1)',
-            backdropFilter: 'blur(8px)'
-          }
-        }}
-        PaperProps={{
-          elevation: 24,
-          sx: {
-            borderRadius: 4,
-            border: `1px solid ${BMW.border}`,
-            background: BMW.white,
-            overflow: 'hidden',
-            boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)'
-          }
-        }}
-      >
-        {/* Header */}
-        <Box sx={{
-          p: 3,
-          background: 'linear-gradient(135deg, #1C69D4 0%, #0A4B9C 100%)',
-          color: 'white',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between'
-        }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <Box sx={{
-              p: 1,
-              bgcolor: 'rgba(255,255,255,0.15)',
-              borderRadius: 2,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
-            }}>
-              <Person sx={{ fontSize: 24 }} />
-            </Box>
-            <Box>
-              <Typography variant="h5" fontWeight={700}>
-                Edit Profile
-              </Typography>
-              <Typography variant="body2" sx={{ opacity: 0.9 }}>
-                Update your personal information
-              </Typography>
-            </Box>
-          </Box>
-          <IconButton
-            onClick={handleCancelEdit}
-            sx={{
-              color: 'white',
-              bgcolor: 'rgba(255,255,255,0.1)',
-              '&:hover': { bgcolor: 'rgba(255,255,255,0.2)' }
-            }}
-          >
-            <Close />
-          </IconButton>
-        </Box>
 
-        {/* Content */}
-        <Box sx={{ p: 4 }}>
-          {error && (
-            <Alert severity="error" sx={{ mb: 3, borderRadius: 2 }}>
-              {error}
-            </Alert>
-          )}
-
-          {success && (
-            <Alert severity="success" sx={{ mb: 3, borderRadius: 2 }}>
-              {success}
-            </Alert>
-          )}
-
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-            <Box sx={{ display: 'grid', gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' }, gap: 3 }}>
-              {/* Username */}
-              <TextField
-                label="Username"
-                value={editForm.username}
-                onChange={handleEditChange('username')}
-                fullWidth
-                variant="outlined"
-                disabled={loading}
-                InputProps={{
-                  sx: { borderRadius: 2 }
-                }}
-              />
-
-              {/* Email */}
-              <TextField
-                label="Email"
-                type="email"
-                value={editForm.email}
-                onChange={handleEditChange('email')}
-                fullWidth
-                variant="outlined"
-                disabled={loading}
-                InputProps={{
-                  sx: { borderRadius: 2 }
-                }}
-              />
-            </Box>
-
-            <Divider sx={{ my: 1 }}>
-              <Chip label="Security" size="small" sx={{ bgcolor: BMW.surface, fontWeight: 600 }} />
-            </Divider>
-
-            {/* New Password */}
-            <TextField
-              label="New Password"
-              type={showPassword ? 'text' : 'password'}
-              value={editForm.newPassword}
-              onChange={handleEditChange('newPassword')}
-              fullWidth
-              variant="outlined"
-              disabled={loading}
-              placeholder="Leave empty to keep current password"
-              InputProps={{
-                sx: { borderRadius: 2 },
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      onClick={handleClickShowPassword}
-                      edge="end"
-                    >
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-
-            {/* Confirm Password */}
-            <TextField
-              label="Confirm New Password"
-              type={showConfirmPassword ? 'text' : 'password'}
-              value={editForm.confirmPassword}
-              onChange={handleEditChange('confirmPassword')}
-              fullWidth
-              variant="outlined"
-              disabled={loading}
-              InputProps={{
-                sx: { borderRadius: 2 },
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      onClick={handleClickShowConfirmPassword}
-                      edge="end"
-                    >
-                      {showConfirmPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                ),
-              }}
-            />
-          </Box>
-
-          {/* Actions */}
-          <Box sx={{
-            display: 'flex',
-            gap: 2,
-            mt: 4,
-            justifyContent: 'flex-end',
-            pt: 3,
-            borderTop: `1px solid ${BMW.border}`
-          }}>
-            <Button
-              onClick={handleCancelEdit}
-              size="large"
-              disabled={loading}
-              sx={{
-                color: BMW.textSecondary,
-                fontWeight: 600,
-                px: 3,
-                '&:hover': { background: BMW.surface }
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={handleSaveProfile}
-              size="large"
-              variant="contained"
-              disabled={loading}
-              startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <Save />}
-              sx={{
-                px: 4,
-                py: 1,
-                borderRadius: 2,
-                boxShadow: BMW.shadowMd
-                // Gradient styles are now global in theme
-              }}
-            >
-              {loading ? 'Saving Changes...' : 'Save Changes'}
-            </Button>
-          </Box>
-        </Box>
-      </Dialog>
 
       {/* Toolbar spacer */}
       <Toolbar sx={{ minHeight: { xs: '64px', sm: '72px' } }} />

@@ -1,51 +1,105 @@
-# CitNow Video Analysis Platform
+# 🎥 CitNow Video Analysis Platform
 
-A hybrid cloud-based video analysis tool for vehicle service centers.
+[![Status: Active](https://img.shields.io/badge/Status-Active-brightgreen.svg)]()
+[![Platform: Web](https://img.shields.io/badge/Platform-Web-blue.svg)]()
+[![Backend: FastAPI](https://img.shields.io/badge/Backend-FastAPI-009688.svg)]()
 
-## 🚀 Architecture
-This project uses a **Cloud-First** architecture to ensure high performance even on low-end local hardware.
+An elite, AI-driven media analysis ecosystem designed for modern vehicle service centers. This platform leverages high-performance cloud processing to provide deep insights into video quality, audio clarity, and communication effectiveness.
 
-*   **Frontend**: React.js (Runs locally on your machine).
-*   **Backend**: FastAPI (Runs on **Hugging Face Spaces** Cloud with 16GB RAM).
-*   **AI Engine**: FFmpeg + OpenAI Whisper + Transformers (Offloaded to Cloud).
-*   **Database**: MongoDB Atlas (Cloud Database).
+---
 
-## 🛠️ Quick Start
+## 🚀 Core Features
 
-### 1. Start the Frontend
-The backend is always running in the cloud, so you only need to start the frontend.
+### 🧠 Intelligent Analysis
+- **Quality Ranking**: Automated scoring of video resolution, stability, and lighting.
+- **Audio Clarity**: Advanced noise detection, volume normalization, and clarity analysis using `librosa`.
+- **AI Transcription**: High-accuracy speech-to-text powered by **Faster-Whisper**.
+- **Translation & Summarization**: Seamless multilingual support via NLLB/MarianMT and text summarization with BART.
+
+### 🏛️ Elite Management
+- **Multi-Tenant Architecture**: Dedicated spaces for different Dealer Networks (Super Admin vs. Dealer Admin).
+- **Team Mgmt**: Robust user control and role-based access (RBAC).
+- **Bulk Upload**: High-throughput video analysis pipeline for large-scale operations.
+- **PDF Reporting**: Premium, branded report generation with data visualization (`Recharts`).
+
+---
+
+## 🏗️ Project Structure
+
+The repository is organized as a monorepo for seamless development and deployment.
+
+```text
+.
+├── frontend/           # Primary Admin Dashboard (React + MUI v7)
+├── dealer_frontend/    # Dealer-Specific Interface (Lightweight Vite + React)
+├── backend/            # FastAPI AI Processing Engine (Python)
+├── .github/            # CI/CD Workflows
+└── docs/               # Documentation & Performance Guides
+```
+
+---
+
+## 🛠️ Environment & Technology
+
+### Frontend
+- **Framework**: React 19
+- **Components**: Material UI v7 (Custom BMW-Elite Theme)
+- **Visuals**: Recharts (Data Viz), html2canvas/jspdf (Reporting)
+
+### Backend (Cloud-Powered)
+- **API**: FastAPI (Uvicorn)
+- **Processing**: OpenCV (Video), Librosa (Audio)
+- **AI Stack**: PyTorch, Transformers, Faster-Whisper
+- **Database**: MongoDB Atlas
+
+---
+
+## 🚦 Getting Started
+
+### 1. Local Development (Frontend)
+The primary dashboard runs locally while connecting to the stable cloud backend.
 
 ```bash
 cd frontend
+npm install
 npm start
 ```
-Access the app at: `http://localhost:3000`
+Access the application at `http://localhost:3000`.
 
-### 2. Login
-Use your credentials (e.g., `vicky@mail.com`). The app will automatically connect to the Cloud Backend.
+### 2. Backend Deployment
+The backend is optimized for deployment on **Hugging Face Spaces** or any Docker-ready cloud provider.
 
-## ☁️ Cloud Resources
-*   **🚀 Live App**: [https://videoproject-frontend.pages.dev/login](https://videoproject-frontend.pages.dev/login)
-*   **Backend API**: [https://bharathan56-citnow-backend.hf.space](https://bharathan56-citnow-backend.hf.space)
-*   **Hugging Face Space**: [CitNow Backend Space](https://huggingface.co/spaces/bharathan56/citnow-backend)
+- **Cloud Instance**: [Hugging Face Space](https://huggingface.co/spaces/bharathan56/citnow-backend)
+- **API Entrypoint**: `https://bharathan56-citnow-backend.hf.space`
 
-## � Default Credentials
+---
+
+## 🔑 Access Control
 
 ### 👑 Super Admin
-*   **Username:** `admin`
-*   **Password:** `admin123`
-*   *Access Level: Full control over all dealers, users, and system settings.*
+- **Username:** `admin`
+- **Password:** `admin123`
+- *Access: Global management of all dealers and system configurations.*
 
-### 🏢 Tenant / Dealer Admin
-*   **Username:** `bmw_admin`
-*   **Password:** `![alt text](image.png)`
-*   **Dealer ID:** `BMW-001`
-*   *Access Level: Manage users and view reports for a specific dealership (Tenant).*
+### 🏢 Dealer / Branch Admin
+- **Username:** `bmw_admin`
+- **Password:** `bmw_secret`
+- *Access: Dealership-specific performance analytics and team management.*
 
-## �📦 Project Structure
-*   `frontend/` - React application source code.
-*   `backend/` - Python FastAPI application (only needed for cloud deployment updates).
+---
+
+## ☁️ Ecosystem URLs
+
+- **Live Application**: [https://videoproject-frontend.pages.dev](https://videoproject-frontend.pages.dev)
+- **API Documentation**: [FastAPI Docs](https://bharathan56-citnow-backend.hf.space/docs)
+
+---
 
 ## ❓ Troubleshooting
-*   **"API Error"**: Check if the Hugging Face Space is "Running" (Green badge). If it's "Sleeping", visiting the URL will wake it up (takes ~30s).
-*   **Login Failed**: Ensure your internet connection is active (required to reach Cloud DB).
+
+- **"API Error"**: The cloud backend may enter a "Sleep" state. Visit the API URL once to wake it up (takes ~30s).
+- **Video Processing Delays**: Large videos or bulk uploads may take a few minutes as the AI engine performs deep frame-by-frame analysis.
+
+---
+
+© 2026 CitNow Analytics | Powered by Advanced AI Media Processing

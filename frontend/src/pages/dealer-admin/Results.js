@@ -3,17 +3,21 @@ import {
   Card, CardContent, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper,
   Button, Box, Chip, Tooltip, IconButton, Dialog, DialogTitle, DialogContent, DialogActions,
   TablePagination, Grid, LinearProgress, Avatar, Fade, Container, TextField, Stack,
-  InputAdornment, Divider, Badge
+  InputAdornment, Divider, Badge, MenuItem, Menu
 } from '@mui/material';
 import {
   Business, DirectionsCar, Person, Description, Email, Phone, Videocam, Mic,
   Vibration, VolumeUp, VolumeOff, Warning, CheckCircle, Score, Visibility, ArrowBack,
   Delete as DeleteIcon, FileDownload as FileDownloadIcon, Search as SearchIcon,
   FilterList, Refresh, Analytics, TrendingUp, Star, Assessment, Dashboard as DashboardIcon,
-  PieChart, Timeline, Speed, Group, VideoLibrary, EmojiEvents
+  PieChart, Timeline, Speed, Group, VideoLibrary, EmojiEvents, PictureAsPdf
 } from '@mui/icons-material';
 import api from '../../services/api';
 import { getDealerUserStats } from '../../services/dealer_user';
+import { useContext } from 'react';
+import { AuthContext } from '../../contexts/AuthContext';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // Modern BMW-Inspired Theme (same as your dealer management)
 const MODERN_BMW_THEME = {
@@ -160,6 +164,7 @@ const StatsCard = ({ icon: Icon, value, label, color, trend }) => (
 );
 
 export default function Results() {
+  const { user: authUser } = useContext(AuthContext);
   const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedResult, setSelectedResult] = useState(null);
@@ -167,6 +172,8 @@ export default function Results() {
   const [searchTerm, setSearchTerm] = useState('');
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [userStats, setUserStats] = useState([]);
+  const [dealershipFilter, setDealershipFilter] = useState(''); // '' = All
+  const [exportAnchor, setExportAnchor] = useState(null); // export dropdown
 
   // Pagination state
   const [page, setPage] = useState(0);
@@ -191,57 +198,61 @@ export default function Results() {
   const loadData = async () => {
     setLoading(true);
     try {
-      // Load first page
+      // Load results
       const res = await api.get('/results?page=1&per_page=100');
       const data = res.data;
 
-      // Handle NEW format
-      const results = data.results || data || []; // Support both formats
-      const totalCount = data.total || results.length; // Get total from backend
+      // Handle NEW format securely
+      let rawResults = data.results || data || [];
 
-      // ✅ CRITICAL FIX: Update BOTH states
-      setRows(results); // For table display
-      setAllRows(results); // For filtering and pagination
-      setCurrentPageBackend(2); // Next backend page
-
-      // Get user stats for User Analytics section
-      const userRes = await api.get('/users/me');
-      const currentUser = userRes.data;
-
-      // ✅ FIX: Check if there's more data correctly
-      if (data.has_more !== undefined) {
-        // Use backend's has_more flag if available
-        setHasMore(data.has_more);
-      } else if (data.total !== undefined) {
-        // If backend provides total, calculate has_more
-        const loadedCount = results.length;
-        const total = data.total;
-        setHasMore(loadedCount < total);
-      } else {
-        // Fallback: if we got exactly 100, assume there might be more
-        setHasMore(results.length === 100);
-      }
-
-      if (currentUser.dealer_id) {
-        const userStatsData = await getDealerUserStats(currentUser.dealer_id);
-        // ✅ Ensure userStatsData is an array before setting
-        if (Array.isArray(userStatsData)) {
-          setUserStats(userStatsData);
-        } else {
-          console.warn('User stats data is not an array:', userStatsData);
-          setUserStats([]);
+      // Ensure it's an array before processing
+      let results = [];
+      if (Array.isArray(rawResults)) {
+        results = rawResults;
+      } else if (typeof rawResults === 'object') {
+        const values = Object.values(rawResults);
+        if (values.length > 0 && Array.isArray(values[0])) {
+          results = values[0];
         }
       }
 
-      // ✅ FIX: Add array check before using .forEach()
-      if (Array.isArray(results)) {
-        const avgVideo = results.reduce((sum, r) => sum + (r.video_analysis?.quality_score || 0), 0) / results.length || 0;
-        const avgAudio = results.reduce((sum, r) => sum + (r.audio_analysis?.score || 0), 0) / results.length || 0;
-        const avgOverall = results.reduce((sum, r) => sum + (r.overall_quality?.overall_score || 0), 0) / results.length || 0;
+      // 🔐 HIERARCHY FILTER: Each user sees only THEIR OWN uploaded analyses
+      // Try all possible ID field names from authUser
+      const currentUserId = authUser?.id || authUser?._id || authUser?.user_id;
+      console.log('🔐 Results filter - currentUserId:', currentUserId, 'authUser:', authUser);
+
+      if (currentUserId && results.length > 0) {
+        const before = results.length;
+        results = results.filter(r => {
+          const submittedBy = r.submitted_by_user_id
+            || r.user_id
+            || r.submitted_by
+            || r.created_by;
+          return submittedBy === currentUserId
+            || submittedBy === String(currentUserId)
+            || String(submittedBy) === String(currentUserId);
+        });
+        console.log(`🔐 Filtered from ${before} → ${results.length} results for user ${authUser?.username}`);
+      }
+
+      // Update states safely
+      setRows(results);
+      setAllRows(results);
+      setCurrentPageBackend(2);
+      setHasMore(false); // disable lazy loading since we filter client-side
+
+      // Only show current user's own stats - no other users
+      setUserStats([]);
+
+      // Compute stats from FILTERED results only
+      if (Array.isArray(results) && results.length > 0) {
+        const avgVideo = results.reduce((sum, r) => sum + (r.video_analysis?.quality_score || r.video_quality_score || 0), 0) / results.length;
+        const avgAudio = results.reduce((sum, r) => sum + (r.audio_analysis?.score || r.audio_quality_score || 0), 0) / results.length;
+        const avgOverall = results.reduce((sum, r) => sum + (r.overall_quality?.overall_score || r.overall_quality_score || 0), 0) / results.length;
 
         const distribution = { excellent: 0, good: 0, fair: 0, poor: 0 };
         results.forEach(r => {
-          const score = r.overall_quality?.overall_score || 0;
+          const score = r.overall_quality?.overall_score || r.overall_quality_score || 0;
           if (score >= 8) distribution.excellent++;
           else if (score >= 6) distribution.good++;
           else if (score >= 4) distribution.fair++;
@@ -249,19 +260,27 @@ export default function Results() {
         });
 
         setStats({
-          totalResults: totalCount,
+          totalResults: results.length,   // use FILTERED count, not backend total
           averageVideoScore: avgVideo,
           averageAudioScore: avgAudio,
           averageOverallScore: avgOverall,
           qualityDistribution: distribution
+        });
+      } else {
+        setStats({
+          totalResults: 0,
+          averageVideoScore: 0,
+          averageAudioScore: 0,
+          averageOverallScore: 0,
+          qualityDistribution: { excellent: 0, good: 0, fair: 0, poor: 0 }
         });
       }
 
     } catch (error) {
       console.error('Error loading results:', error);
       setRows([]);
-      setAllRows([]); // Also reset allRows on error
-      setHasMore(false); // Reset hasMore on error
+      setAllRows([]);
+      setHasMore(false);
     } finally {
       setLoading(false);
     }
@@ -354,16 +373,27 @@ export default function Results() {
     setPage(0);
   };
 
-  const filteredRows = allRows.filter(r => {
+  // Unique dealerships from loaded results for filter dropdown
+  const dealershipOptions = Array.from(
+    new Set(
+      (allRows || [])
+        .map(r => r.citnow_metadata?.dealership)
+        .filter(Boolean)
+    )
+  ).sort();
+
+  const filteredRows = (allRows || []).filter(r => {
     const term = searchTerm.toLowerCase();
     const dm = r.citnow_metadata || {};
-    return (
+    const dealershipMatch = !dealershipFilter || (dm.dealership || '') === dealershipFilter;
+    const searchMatch = (
       (dm.dealership || '').toLowerCase().includes(term) ||
       (dm.vehicle || dm.registration || '').toLowerCase().includes(term) ||
       (dm.email || '').toLowerCase().includes(term) ||
       (dm.phone || '').toLowerCase().includes(term) ||
       (dm.service_advisor || '').toLowerCase().includes(term)
     );
+    return dealershipMatch && searchMatch;
   });
 
   // Get current page data
@@ -457,6 +487,85 @@ export default function Results() {
     URL.revokeObjectURL(url);
   };
 
+  const exportToPdf = () => {
+    if (!filteredRows.length) {
+      alert('No results to export');
+      return;
+    }
+
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+
+    // Header
+    doc.setFillColor(14, 35, 66);
+    doc.rect(0, 0, 297, 18, 'F');
+    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('CitNOW Analytics — Quality Analysis Report', 14, 12);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 220, 12);
+
+    // Table
+    const columns = [
+      { header: 'Dealership', dataKey: 'dealership' },
+      { header: 'Vehicle', dataKey: 'vehicle' },
+      { header: 'Service Advisor', dataKey: 'advisor' },
+      { header: 'Video Score', dataKey: 'video' },
+      { header: 'Audio Score', dataKey: 'audio' },
+      { header: 'Overall Score', dataKey: 'overall' },
+      { header: 'Quality', dataKey: 'quality' },
+      { header: 'Date', dataKey: 'date' },
+    ];
+
+    const tableData = filteredRows.map(r => {
+      const m = r.citnow_metadata || {};
+      return {
+        dealership: m.dealership || '—',
+        vehicle: [m.vehicle, m.registration].filter(Boolean).join(' / ') || '—',
+        advisor: m.service_advisor || '—',
+        video: (r.video_analysis?.quality_score || 0).toFixed(1),
+        audio: (r.audio_analysis?.score || 0).toFixed(1),
+        overall: (r.overall_quality?.overall_score || 0).toFixed(1),
+        quality: r.overall_quality?.overall_label || '—',
+        date: r.created_at ? new Date(r.created_at).toLocaleDateString() : '—',
+      };
+    });
+
+    autoTable(doc, {
+      startY: 22,
+      columns,
+      body: tableData,
+      headStyles: {
+        fillColor: [14, 35, 66],
+        textColor: 255,
+        fontStyle: 'bold',
+        fontSize: 9,
+      },
+      bodyStyles: { fontSize: 8, textColor: [30, 41, 59] },
+      alternateRowStyles: { fillColor: [248, 250, 252] },
+      columnStyles: {
+        video: { halign: 'center' },
+        audio: { halign: 'center' },
+        overall: { halign: 'center' },
+        quality: { halign: 'center' },
+      },
+      margin: { left: 14, right: 14 },
+      didDrawPage: (data) => {
+        // Footer
+        const pageCount = doc.internal.getNumberOfPages();
+        doc.setFontSize(8);
+        doc.setTextColor(148, 163, 184);
+        doc.text(
+          `Page ${data.pageNumber} of ${pageCount}`,
+          data.settings.margin.left,
+          doc.internal.pageSize.height - 5
+        );
+      },
+    });
+
+    doc.save(`quality_analysis_${new Date().toISOString().slice(0, 10)}.pdf`);
+  };
 
   const getUserName = (userId) => {
     //  Add array check
@@ -712,6 +821,31 @@ export default function Results() {
                     }
                   }}
                 />
+
+                {/* Dealership Filter Dropdown */}
+                {dealershipOptions.length > 0 && (
+                  <TextField
+                    select
+                    size="small"
+                    label="Dealership"
+                    value={dealershipFilter}
+                    onChange={(e) => { setDealershipFilter(e.target.value); setPage(0); }}
+                    sx={{
+                      minWidth: 230,
+                      '& .MuiOutlinedInput-root': {
+                        background: MODERN_BMW_THEME.background,
+                        borderRadius: 2,
+                        '&:hover fieldset': { borderColor: MODERN_BMW_THEME.primary },
+                      }
+                    }}
+                  >
+                    <MenuItem value="">🏢 All Dealerships</MenuItem>
+                    {dealershipOptions.map(d => (
+                      <MenuItem key={d} value={d}>{d}</MenuItem>
+                    ))}
+                  </TextField>
+                )}
+
                 <Button
                   startIcon={<Refresh />}
                   variant="outlined"
@@ -730,11 +864,13 @@ export default function Results() {
                 >
                   Refresh
                 </Button>
+
+                {/* Single Export dropdown */}
                 <Button
-                  startIcon={<FileDownloadIcon />}
                   variant="contained"
-                  onClick={exportToCsv}
+                  endIcon={<FileDownloadIcon />}
                   disabled={!filteredRows.length}
+                  onClick={(e) => setExportAnchor(e.currentTarget)}
                   sx={{
                     background: MODERN_BMW_THEME.gradientPrimary,
                     borderRadius: 2,
@@ -748,8 +884,28 @@ export default function Results() {
                     transition: 'all 0.2s ease-in-out'
                   }}
                 >
-                  Export CSV
+                  Export
                 </Button>
+                <Menu
+                  anchorEl={exportAnchor}
+                  open={Boolean(exportAnchor)}
+                  onClose={() => setExportAnchor(null)}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                  PaperProps={{
+                    elevation: 4,
+                    sx: { borderRadius: 2, mt: 0.5, minWidth: 160 }
+                  }}
+                >
+                  <MenuItem onClick={() => { exportToCsv(); setExportAnchor(null); }} sx={{ gap: 1.5, py: 1.2 }}>
+                    <FileDownloadIcon sx={{ color: MODERN_BMW_THEME.primary, fontSize: 20 }} />
+                    Export CSV
+                  </MenuItem>
+                  <MenuItem onClick={() => { exportToPdf(); setExportAnchor(null); }} sx={{ gap: 1.5, py: 1.2 }}>
+                    <PictureAsPdf sx={{ color: '#e74c3c', fontSize: 20 }} />
+                    Export PDF
+                  </MenuItem>
+                </Menu>
               </Stack>
             </Box>
 

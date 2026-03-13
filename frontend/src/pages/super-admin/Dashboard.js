@@ -85,6 +85,7 @@ import {
   PolarAngleAxis,
   PolarRadiusAxis,
   Radar,
+  RadarChart,
   Tooltip as RechartsTooltip,
   ResponsiveContainer,
   BarChart as RechartsBarChart,
@@ -230,40 +231,70 @@ const DealerPerformanceChart = ({ data }) => {
     );
   }
 
-  // --- Format data ---
-  const formattedData = data.map((dealer, i) => ({
-    name: dealer.name,
-    score: dealer.overall,
-    fill:
-      dealer.overall >= 8.5
-        ? "#00C853"
-        : dealer.overall >= 7
-          ? "#2979FF"
-          : dealer.overall >= 5
-            ? "#FFC400"
-            : "#e7e7e7ff",
-    radius: `${100 - i * 20}%`, // each ring smaller
-  }));
+  // Colors for each dealer
+  const DEALER_COLORS = ['#1C69D4', '#00C853', '#FFC400', '#FF5252', '#7C4DFF', '#00BCD4'];
+
+  // Build radar data: axes are the metric categories
+  const radarData = [
+    {
+      metric: 'Overall Score',
+      fullMark: 10,
+      ...Object.fromEntries(data.map(d => [d.name, d.overall || 0]))
+    },
+    {
+      metric: 'Video Quality',
+      fullMark: 10,
+      ...Object.fromEntries(data.map(d => [d.name, d.video_quality || d.overall || 0]))
+    },
+    {
+      metric: 'Audio Quality',
+      fullMark: 10,
+      ...Object.fromEntries(data.map(d => [d.name, d.audio_quality || d.overall || 0]))
+    }
+  ];
 
   const avgScore = (
     data.reduce((sum, d) => sum + d.overall, 0) / data.length
   ).toFixed(1);
 
-  // --- Chart geometry ---
-  const chartWidth = 350;
-  const chartHeight = 300;
-  const centerX = chartWidth / 2;
-  const centerY = chartHeight / 2;
-  const startAngle = 270; // top start
-  const endAngle = 2;
-
-  const toRadians = (deg) => (deg * Math.PI) / 180;
+  // Custom tooltip
+  const CustomRadarTooltip = ({ active, payload, label }) => {
+    if (active && payload && payload.length) {
+      return (
+        <Box sx={{
+          background: 'rgba(255,255,255,0.96)',
+          borderRadius: 2,
+          p: 1.5,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          border: `1px solid ${MODERN_BMW_THEME.border}`,
+          minWidth: 140
+        }}>
+          <Typography variant="caption" sx={{ fontWeight: 700, color: MODERN_BMW_THEME.textPrimary, display: 'block', mb: 0.5 }}>
+            {label}
+          </Typography>
+          {payload.map((entry, i) => (
+            <Box key={i} sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, mb: 0.25 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: entry.color, flexShrink: 0 }} />
+                <Typography variant="caption" sx={{ color: MODERN_BMW_THEME.textSecondary, fontSize: '11px' }}>
+                  {entry.name}
+                </Typography>
+              </Box>
+              <Typography variant="caption" sx={{ fontWeight: 700, color: entry.color, fontSize: '11px' }}>
+                {typeof entry.value === 'number' ? entry.value.toFixed(1) : entry.value}
+              </Typography>
+            </Box>
+          ))}
+        </Box>
+      );
+    }
+    return null;
+  };
 
   return (
     <Box
       sx={{
         width: "100%",
-        height: 480,
         display: "flex",
         flexDirection: "column",
         alignItems: "center",
@@ -275,9 +306,11 @@ const DealerPerformanceChart = ({ data }) => {
       <Typography variant="h6" sx={{ mb: 1, fontWeight: 600 }}>
         Dealer Performance Ranking
       </Typography>
-      <Typography variant="body2" sx={{ mb: 3, color: "#666" }}>
-        Overal Quality Scores
+      <Typography variant="body2" sx={{ mb: 2, color: "#666" }}>
+        Spider Chart — Quality Scores
       </Typography>
+
+      {/* Summary Stats */}
       <Box sx={{
         display: 'flex',
         justifyContent: 'center',
@@ -322,114 +355,45 @@ const DealerPerformanceChart = ({ data }) => {
         </Box>
       </Box>
 
-      {/* Chart */}
-      <Box sx={{ position: "relative" }}>
-        <RadialBarChart
-          width={chartWidth}
-          height={chartHeight}
-          innerRadius="30%"
-          barSize={12}
-          data={formattedData}
-          startAngle={startAngle}
-          endAngle={endAngle}
-        >
-          <PolarAngleAxis type="number" domain={[0, 10]} tick={false} />
-          <RadialBar dataKey="score" background cornerRadius={0} />
-        </RadialBarChart>
-
-        {/* Center text */}
-        <Box
-          sx={{
-            position: "absolute",
-            top: "50%",
-            left: "50%",
-            transform: "translate(-50%, -50%)",
-            textAlign: "center",
-          }}
-        >
-          <Typography
-            variant="h4"
-            sx={{ fontWeight: 700, color: "#1976d2", lineHeight: 1 }}
-          >
-            {data.length}
-          </Typography>
-          <Typography variant="body2" sx={{ color: "#666", lineHeight: 1.2 }}>
-            Total Dealers
-          </Typography>
-        </Box>
-
-        {/*  Labels just to the RIGHT of the arc’s start point */}
-        {formattedData.slice().reverse().map((dealer, i) => {
-          const radius = 100 - i * 20 - 10;
-          const angleRad = toRadians(startAngle);
-          const offset = 6; // push labels slightly right of the start
-
-          // Calculate X position (same for all since we're at 270° - top center)
-          const x = centerX + Math.cos(angleRad) * radius + offset;
-
-          // Fixed: Use the same Y position for all labels to create a straight line
-          // Since we're at 270° (top center), the Y should be the same for all
-          const baseY = centerY - Math.sin(angleRad) * 100; // Use a fixed base Y position
-          const y = baseY - (i * 25.7); // Stack vertically with consistent spacing
-
-          return (
-            <Box
+      {/* Radar / Spider Chart */}
+      <ResponsiveContainer width="100%" height={320}>
+        <RadarChart data={radarData} outerRadius="75%">
+          <PolarGrid stroke={MODERN_BMW_THEME.border} />
+          <PolarAngleAxis
+            dataKey="metric"
+            tick={{ fontSize: 11, fontWeight: 600, fill: MODERN_BMW_THEME.textSecondary }}
+          />
+          <PolarRadiusAxis
+            angle={90}
+            domain={[0, 10]}
+            tick={{ fontSize: 10, fill: MODERN_BMW_THEME.textTertiary }}
+            axisLine={false}
+          />
+          {data.map((dealer, i) => (
+            <Radar
               key={dealer.name}
-              sx={{
-                position: "absolute",
-                top: y,
-                left: x,
-                display: "flex",
-                alignItems: "center",
-                gap: 0.5,
-                background: "rgba(255, 255, 255, 0.95)",
-                borderRadius: "12px",
-                boxShadow: "0 1px 3px rgba(0,0,0,0.1)",
-                border: `1px solid ${dealer.fill}30`,
-                minWidth: "120px",
-
-              }}
-            >
-              <Box
-                sx={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  backgroundColor: dealer.fill,
-                  flexShrink: 0,
-                }}
-              />
-              <Typography
-                variant="caption"
-                sx={{
-                  color: "#333",
-                  fontWeight: 600,
-                  fontSize: "10px",
-                  lineHeight: 1,
-                  whiteSpace: "nowrap",
-                }}
-              >
-                {dealer.name}
-              </Typography>
-              <Typography
-                variant="caption"
-                sx={{
-                  color: dealer.fill,
-                  fontWeight: 700,
-                  fontSize: "10px",
-                  lineHeight: 1,
-                  marginLeft: "auto",
-                }}
-              >
-                {dealer.score.toFixed(1)}
-              </Typography>
-            </Box>
-          );
-        })}
-      </Box>
+              name={dealer.name}
+              dataKey={dealer.name}
+              stroke={DEALER_COLORS[i % DEALER_COLORS.length]}
+              fill={DEALER_COLORS[i % DEALER_COLORS.length]}
+              fillOpacity={0.15}
+              strokeWidth={2}
+              dot={{ r: 4, fill: DEALER_COLORS[i % DEALER_COLORS.length] }}
+            />
+          ))}
+          <RechartsTooltip content={<CustomRadarTooltip />} />
+          <Legend
+            wrapperStyle={{ fontSize: '12px', fontWeight: 600 }}
+            iconType="circle"
+            iconSize={8}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
     </Box>
   );
 };
+
+
 
 const QualityDistributionChart = ({ data }) => {
   const filteredData = data.filter(item => item.value > 0);
@@ -547,51 +511,52 @@ const StatCard = ({ title, value, change, changeType, icon, color, subtitle }) =
 );
 
 // Top Performer Card
-const TopPerformerCard = ({ dealer, rank, metric, value }) => (
-  <Card sx={{
-    background: MODERN_BMW_THEME.surfaceElevated,
-    border: `1px solid ${MODERN_BMW_THEME.border}`,
-    borderRadius: 3,
-    boxShadow: MODERN_BMW_THEME.shadowSm,
-    mb: 2,
-    transition: 'all 0.2s ease-in-out',
-    '&:hover': { boxShadow: MODERN_BMW_THEME.shadowMd }
-  }}>
-    <CardContent sx={{ p: 2.5 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
-          <Box sx={{
-            width: 32, height: 32, borderRadius: '50%', background: rank === 1 ? MODERN_BMW_THEME.gradientAccent :
-              rank === 2 ? MODERN_BMW_THEME.gradientPrimary : rank === 3 ? MODERN_BMW_THEME.gradientSuccess : MODERN_BMW_THEME.surface,
-            display: 'flex', alignItems: 'center', justifyContent: 'center', mr: 2, fontWeight: 700, fontSize: '14px',
-            color: rank <= 3 ? MODERN_BMW_THEME.background : MODERN_BMW_THEME.textSecondary, boxShadow: MODERN_BMW_THEME.shadowMd, flexShrink: 0
-          }}>
-            {rank}
-          </Box>
-          <Box sx={{ flex: 1, minWidth: 0 }}>
-            <Typography variant="subtitle2" sx={{ color: MODERN_BMW_THEME.textPrimary, fontWeight: 600, mb: 0.5, truncate: true }}>
-              {dealer.name}
-            </Typography>
-            <Typography variant="caption" sx={{ color: MODERN_BMW_THEME.textSecondary, display: 'block' }}>
-              {metric}: {value}
-            </Typography>
-          </Box>
+const TopPerformerCard = ({ dealer, rank, metric, value }) => {
+  const numericValue = parseFloat(value) || 0;
+  return (
+    <Box sx={{
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      px: 2,
+      py: 1.5,
+      borderBottom: `1px solid ${MODERN_BMW_THEME.border}`,
+      transition: 'all 0.2s ease-in-out',
+      '&:last-child': { borderBottom: 'none' },
+      '&:hover': { background: MODERN_BMW_THEME.primaryUltraLight }
+    }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', flex: 1, minWidth: 0 }}>
+        <Box sx={{
+          width: 32, height: 32, borderRadius: '50%', background: rank === 1 ? MODERN_BMW_THEME.gradientAccent :
+            rank === 2 ? MODERN_BMW_THEME.gradientPrimary : rank === 3 ? MODERN_BMW_THEME.gradientSuccess : MODERN_BMW_THEME.surface,
+          display: 'flex', alignItems: 'center', justifyContent: 'center', mr: 2, fontWeight: 700, fontSize: '14px',
+          color: rank <= 3 ? MODERN_BMW_THEME.background : MODERN_BMW_THEME.textSecondary, boxShadow: MODERN_BMW_THEME.shadowMd, flexShrink: 0
+        }}>
+          {rank}
         </Box>
-        <Chip
-          label={dealer.score}
-          size="small"
-          sx={{
-            background: dealer.score >= 8.5 ? MODERN_BMW_THEME.successLight : dealer.score >= 7 ? MODERN_BMW_THEME.primaryUltraLight :
-              dealer.score >= 5 ? MODERN_BMW_THEME.warningLight : MODERN_BMW_THEME.errorLight,
-            color: dealer.score >= 8.5 ? MODERN_BMW_THEME.success : dealer.score >= 7 ? MODERN_BMW_THEME.primary :
-              dealer.score >= 5 ? MODERN_BMW_THEME.warning : MODERN_BMW_THEME.error,
-            fontWeight: 700, fontSize: '0.75rem', flexShrink: 0
-          }}
-        />
+        <Box sx={{ flex: 1, minWidth: 0, textAlign: 'left' }}>
+          <Typography variant="subtitle2" sx={{ color: MODERN_BMW_THEME.textPrimary, fontWeight: 600, mb: 0.25, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {dealer.name}
+          </Typography>
+          <Typography variant="caption" sx={{ color: MODERN_BMW_THEME.textSecondary, display: 'block' }}>
+            {metric}
+          </Typography>
+        </Box>
       </Box>
-    </CardContent>
-  </Card>
-);
+      <Chip
+        label={value}
+        size="small"
+        sx={{
+          background: numericValue >= 8.5 ? MODERN_BMW_THEME.successLight : numericValue >= 7 ? MODERN_BMW_THEME.primaryUltraLight :
+            numericValue >= 5 ? MODERN_BMW_THEME.warningLight : MODERN_BMW_THEME.errorLight,
+          color: numericValue >= 8.5 ? MODERN_BMW_THEME.success : numericValue >= 7 ? MODERN_BMW_THEME.primary :
+            numericValue >= 5 ? MODERN_BMW_THEME.warning : MODERN_BMW_THEME.error,
+          fontWeight: 700, fontSize: '0.75rem', flexShrink: 0, ml: 1
+        }}
+      />
+    </Box>
+  )
+};
 
 // Dealer Detail Dialog Components
 const QualityDistributionChartDetail = ({ data }) => (
@@ -814,8 +779,12 @@ const DealerDetailDialog = ({ open, onClose, dealer }) => {
     try {
       // Load dealer results
       const dealerId = normalizeId(dealer.id);
+      console.log('Loading dealer data for ID:', dealerId, 'Dealer object:', dealer);
       const res = await api.get(`/results?dealer_id=${encodeURIComponent(dealerId)}`);
-      const results = res.data || [];
+      const resData = res.data;
+      // Normalize: API may return array or { results: [...] }
+      const results = Array.isArray(resData) ? resData : (resData?.results || []);
+      console.log('Dealer results loaded:', results.length, 'results');
       setDealerResults(results);
 
       // Generate dashboard data
@@ -823,9 +792,12 @@ const DealerDetailDialog = ({ open, onClose, dealer }) => {
       const scoreTrend = generateScoreTrend(results);
       const serviceAdvisorRankings = generateServiceAdvisorRankings(results);
 
-      const avgVideo = results.reduce((sum, r) => sum + (r.video_analysis?.quality_score || 0), 0) / (results.length || 1);
-      const avgAudio = results.reduce((sum, r) => sum + (r.audio_analysis?.score || 0), 0) / (results.length || 1);
-      const avgOverall = results.reduce((sum, r) => sum + (r.overall_quality?.overall_score || 0), 0) / (results.length || 1);
+      // Use multiple fallback paths for score fields
+      const avgVideo = results.reduce((sum, r) => sum + (r.video_analysis?.quality_score || r.video_quality_score || 0), 0) / (results.length || 1);
+      const avgAudio = results.reduce((sum, r) => sum + (r.audio_analysis?.score || r.audio_quality_score || 0), 0) / (results.length || 1);
+      const avgOverall = results.reduce((sum, r) => sum + (r.overall_quality?.overall_score || r.overall_quality_score || 0), 0) / (results.length || 1);
+
+      console.log('Computed averages:', { avgVideo, avgAudio, avgOverall, totalVideos: results.length });
 
       setDashboardData({
         qualityDistribution,
@@ -1487,7 +1459,7 @@ export default function SuperAdminDashboard() {
       };
 
       try {
-        const overviewRes = await api.get('/dashboard/super-admin/overview');
+        const overviewRes = await api.get(`/dashboard/super-admin/overview?timeRange=${timeRange}`);
         overview = overviewRes.data;
         console.log('Overview data:', overview);
       } catch (overviewError) {
@@ -1497,7 +1469,7 @@ export default function SuperAdminDashboard() {
       // Also fetch all results for live trend calculations
       let resultsArray = [];
       try {
-        const resultsRes = await api.get('/results?limit=1000');
+        const resultsRes = await api.get(`/results?limit=1000&timeRange=${timeRange}`);
         const resData = resultsRes.data;
         resultsArray = Array.isArray(resData) ? resData : (resData?.results || []);
       } catch (resError) {
@@ -1954,16 +1926,17 @@ export default function SuperAdminDashboard() {
             Comparative analysis and ranking of dealership performance
           </Typography>
 
-          {/* Dealer Performance & Top Performers */}
-          <Grid container spacing={3} justifyContent="center">
+          <Grid container spacing={3} justifyContent="center" alignItems="stretch">
             {/* Dealer Performance Chart */}
-            <Grid item xs={12} lg={8}>
+            <Grid item xs={12} sm={6} md={6} lg={6}>
               <Card sx={{
                 background: MODERN_BMW_THEME.surfaceElevated,
                 border: `1px solid ${MODERN_BMW_THEME.border}`,
                 borderRadius: 3,
                 boxShadow: MODERN_BMW_THEME.shadowSm,
-                height: '100%'
+                height: '100%',
+                userSelect: 'none',
+                cursor: 'pointer'
               }}>
                 <CardContent sx={{ p: 3 }}>
                   <DealerPerformanceChart data={dashboardData.dealerRankings} />
@@ -1972,15 +1945,17 @@ export default function SuperAdminDashboard() {
             </Grid>
 
             {/* Top Performers */}
-            <Grid item xs={12} lg={4}>
+            <Grid item xs={12} sm={6} md={6} lg={6}>
               <Card sx={{
                 background: MODERN_BMW_THEME.surfaceElevated,
                 border: `1px solid ${MODERN_BMW_THEME.border}`,
                 borderRadius: 3,
                 boxShadow: MODERN_BMW_THEME.shadowSm,
-                height: '100%'
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column'
               }}>
-                <CardContent sx={{ p: 3 }}>
+                <CardContent sx={{ p: 3, flexGrow: 1, display: 'flex', flexDirection: 'column' }}>
                   <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
                     <EmojiEvents sx={{ color: MODERN_BMW_THEME.warning, mr: 2, fontSize: 24 }} />
                     <Typography variant="h6" sx={{
@@ -2009,14 +1984,13 @@ export default function SuperAdminDashboard() {
                     <Tab label="Audio" />
                   </Tabs>
 
-                  <Box sx={{ maxHeight: 400, overflow: 'auto' }}>
+                  <Box sx={{ flexGrow: 1, minHeight: 0, overflow: 'auto' }}>
                     {getTopPerformersByType().slice(0, 5).map((dealer) => (
                       <CardActionArea
                         key={dealer.id}
                         onClick={() => handleViewDealer(dealer)}
                         sx={{
-                          borderRadius: 2,
-                          mb: 1,
+                          borderRadius: 0,
                           '&:hover': {
                             background: MODERN_BMW_THEME.primaryUltraLight
                           }

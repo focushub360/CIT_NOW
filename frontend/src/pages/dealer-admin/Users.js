@@ -1,280 +1,71 @@
-// src/pages/dealer-admin/Users.js
 import React, { useEffect, useState, useContext } from 'react';
 import {
-  Grid,
-  Card,
-  CardContent,
-  Typography,
-  Button,
-  TextField,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  IconButton,
-  MenuItem,
-  Box,
-  Chip,
-  Avatar,
-  Paper,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Tooltip,
-  Alert,
-  InputAdornment,
-  Fade,
-  Container,
-  Divider,
-  LinearProgress,
-  Snackbar
+  Box, Typography, Button, TextField, IconButton, MenuItem, Chip,
+  Table, TableBody, TableCell, TableContainer, TableHead, TableRow,
+  Paper, CircularProgress, Alert, Snackbar, Container, Grid, Divider
 } from '@mui/material';
 import {
-  Add,
-  Edit,
-  Delete,
-  Person,
-  Search,
-  Group,
-  Email,
-  Badge,
-  Refresh,
-  Shield,
-  Visibility,
-  VisibilityOff,
-  Business,
-  ContentCopy,
-  Link,
-  Close
+  Add, Delete, PersonOutline, CheckCircle, ArrowBack, Event
 } from '@mui/icons-material';
 import { listMyDealerUsers, createDealerUser, updateDealerUser, deleteDealerUser } from '../../services/dealer_user';
 import { AuthContext } from '../../contexts/AuthContext';
 
-// BMW Theme Constants
-const MODERN_BMW_THEME = {
-  primary: '#0e2342ff',
-  primaryDark: '#0A4B9C',
-  primaryLight: '#4D8FDF',
-  primaryUltraLight: '#E8F1FD',
-  accent: '#FF6D00',
-  accentLight: '#FF9D45',
-  accentUltraLight: '#FFF3E8',
-  background: '#FFFFFF',
-  surface: '#F8FAFC',
-  surfaceElevated: '#FFFFFF',
+// CitNow / BMW Theme aligned colors
+const THEME = {
+  primary: '#1C3FAA',
+  primaryDark: '#0E2A80',
+  secondaryBtn: '#94A3B8',
+  success: '#10B981',
+  error: '#D32F2F',
+  background: '#F8FAFC',
+  surface: '#FFFFFF',
   border: '#E2E8F0',
-  borderLight: '#F1F5F9',
   textPrimary: '#1E293B',
   textSecondary: '#64748B',
-  textTertiary: '#94A3B8',
-  success: '#10B981',
-  successLight: '#D1FAE5',
-  warning: '#F59E0B',
-  warningLight: '#FEF3C7',
-  error: '#EF4444',
-  errorLight: '#FEE2E2',
-  gradientPrimary: 'linear-gradient(135deg, #1C69D4 0%, #0A4B9C 100%)',
-  gradientAccent: 'linear-gradient(135deg, #FF6D00 0%, #FF8A00 100%)',
-  gradientSuccess: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-  shadowSm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-  shadowMd: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-  shadowLg: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
-  shadowXl: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
 };
 
-// Dealer User Base URL - UPDATED
 const DEALER_USER_BASE_URL = 'https://focus-user.focusengineeringapp.com';
 
-// User Card Component
-const UserCard = ({ user, onEdit, onDelete }) => (
-  <Fade in={true}>
-    <Card sx={{
-      background: MODERN_BMW_THEME.surfaceElevated,
-      border: `1px solid ${MODERN_BMW_THEME.border}`,
-      borderRadius: 3,
-      boxShadow: MODERN_BMW_THEME.shadowSm,
-      transition: 'all 0.2s ease-in-out',
-      '&:hover': {
-        boxShadow: MODERN_BMW_THEME.shadowMd,
-        transform: 'translateY(-2px)',
-        borderColor: MODERN_BMW_THEME.primaryLight
-      },
-      height: '100%'
-    }}>
-      <CardContent sx={{ p: 3 }}>
-        {/* Header */}
-        <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-          <Avatar
-            sx={{
-              width: 56,
-              height: 56,
-              background: MODERN_BMW_THEME.gradientPrimary,
-              fontWeight: 600,
-              fontSize: '18px',
-              mr: 2
-            }}
-          >
-            {(user.username || 'U').charAt(0).toUpperCase()}
-          </Avatar>
-          <Box sx={{ flexGrow: 1 }}>
-            <Typography variant="h6" sx={{
-              color: MODERN_BMW_THEME.textPrimary,
-              fontWeight: 600,
-              mb: 0
-            }}>
-              {user.username}
-            </Typography>
-            {user.job_title && (
-              <Typography variant="caption" sx={{
-                color: MODERN_BMW_THEME.textSecondary,
-                fontWeight: 500,
-                display: 'block',
-                mb: 0.5
-              }}>
-                {user.job_title}
-              </Typography>
-            )}
-            <Chip
-              label={
-                user.role === 'dealer_admin' ? 'Dealer Admin' :
-                  user.role === 'branch_admin' ? 'Branch Admin' :
-                    'User'
-              }
-              size="small"
-              sx={{
-                background: user.role === 'dealer_admin' ? MODERN_BMW_THEME.accent :
-                  user.role === 'branch_admin' ? MODERN_BMW_THEME.warning :
-                    MODERN_BMW_THEME.primary,
-                color: user.role === 'dealer_admin' || user.role === 'branch_admin' ? MODERN_BMW_THEME.textPrimary : 'white',
-                fontWeight: 600,
-                fontSize: '0.75rem',
-                maxWidth: '100%',
-                height: 'auto',
-                '& .MuiChip-label': {
-                  display: 'block',
-                  whiteSpace: 'normal',
-                  padding: '4px 8px'
-                }
-              }}
-            />
-          </Box>
-        </Box>
+// Allowed job titles per hierarchy level (by user role being created)
+const JOB_TITLES_BY_ROLE = {
+  super_admin: ['General Manager', 'Sales Executive', 'Service Advisor', 'Technician', 'Other'],
+  dealer_admin: ['General Manager', 'Sales Executive', 'Service Advisor', 'Technician', 'Other'],
+  branch_admin: ['Sales Executive', 'Service Advisor', 'Technician', 'Other'],
+  dealer_user: ['Service Advisor', 'Technician', 'Other'],
+};
 
-        <Divider sx={{ borderColor: MODERN_BMW_THEME.borderLight, mb: 3 }} />
+// Roles a creator can assign — hierarchy enforcement
+const CREATABLE_ROLES = {
+  dealer_admin: [
+    { value: 'branch_admin', label: 'Branch Admin' },
+    { value: 'dealer_user', label: 'User' },
+  ],
+  branch_admin: [
+    { value: 'dealer_user', label: 'User' },
+  ],
+};
 
-        <Box sx={{ mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-            <Email sx={{ fontSize: 18, color: MODERN_BMW_THEME.textSecondary, mr: 2 }} />
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="caption" sx={{
-                color: MODERN_BMW_THEME.textSecondary,
-                fontWeight: 500,
-                fontSize: '0.75rem'
-              }}>
-                CONTACT
-              </Typography>
-              <Typography variant="body2" sx={{
-                color: MODERN_BMW_THEME.textPrimary,
-                fontWeight: 500,
-                wordBreak: 'break-word'
-              }}>
-                {user.email}
-              </Typography>
-              {user.phone_number && (
-                <Typography variant="caption" sx={{ display: 'block', color: MODERN_BMW_THEME.textSecondary, mt: 0.5 }}>
-                  {user.phone_number}
-                </Typography>
-              )}
-            </Box>
-          </Box>
-
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <Badge sx={{ fontSize: 18, color: MODERN_BMW_THEME.textSecondary, mr: 2 }} />
-            <Box sx={{ flex: 1 }}>
-              <Typography variant="caption" sx={{
-                color: MODERN_BMW_THEME.textSecondary,
-                fontWeight: 500,
-                fontSize: '0.75rem'
-              }}>
-                DEALER ID
-              </Typography>
-              <Typography variant="body2" sx={{
-                color: MODERN_BMW_THEME.textPrimary,
-                fontWeight: 600,
-                fontFamily: 'monospace'
-              }}>
-                {user.dealer_id || '—'}
-              </Typography>
-            </Box>
-          </Box>
-        </Box>
-
-        <Divider sx={{ borderColor: MODERN_BMW_THEME.borderLight, mb: 3 }} />
-
-        {/* Actions */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="caption" sx={{
-            color: MODERN_BMW_THEME.textTertiary,
-            fontStyle: 'italic'
-          }}>
-            Created {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'Recently'}
-          </Typography>
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <Tooltip title="Edit User">
-              <IconButton
-                size="small"
-                onClick={() => onEdit(user)}
-                sx={{
-                  color: MODERN_BMW_THEME.primary,
-                  background: `${MODERN_BMW_THEME.primary}08`,
-                  '&:hover': {
-                    background: `${MODERN_BMW_THEME.primary}15`
-                  }
-                }}
-              >
-                <Edit fontSize="small" />
-              </IconButton>
-            </Tooltip>
-            <Tooltip title="Delete User">
-              <IconButton
-                size="small"
-                onClick={() => onDelete(user._id || user.id)}
-                sx={{
-                  color: MODERN_BMW_THEME.error,
-                  background: `${MODERN_BMW_THEME.error}08`,
-                  '&:hover': {
-                    background: `${MODERN_BMW_THEME.error}15`
-                  }
-                }}
-              >
-                <Delete fontSize="small" />
-              </IconButton>
-            </Tooltip>
-          </Box>
-        </Box>
-      </CardContent>
-    </Card>
-  </Fade>
-);
+const ROLE_LABELS = {
+  dealer_admin: 'Dealer Admin',
+  branch_admin: 'Branch Admin',
+  dealer_user: 'User',
+};
 
 export default function DealerUsers() {
   const { user: authUser } = useContext(AuthContext);
+
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [open, setOpen] = useState(false);
+  
+  // View State: 'list' | 'edit' | 'create'
+  const [viewState, setViewState] = useState('list');
   const [editingUser, setEditingUser] = useState(null);
-  const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-
-  // Success message state
-  const [successMessage, setSuccessMessage] = useState('');
   const [showSuccess, setShowSuccess] = useState(false);
+  const [successMessage, setSuccessMessage] = useState('');
 
   const [form, setForm] = useState({
+    title: 'Mr',
     username: '',
     email: '',
     password: '',
@@ -286,74 +77,56 @@ export default function DealerUsers() {
     phone_number: ''
   });
 
-  // Show success message
-  const showSuccessMessage = (message) => {
-    setSuccessMessage(message);
+  const allowedJobTitles = JOB_TITLES_BY_ROLE[form.role] || JOB_TITLES_BY_ROLE.dealer_user;
+
+  const showSuccessMsg = (msg) => {
+    setSuccessMessage(msg);
     setShowSuccess(true);
   };
 
-  // Close success message
-  const handleCloseSuccess = (event, reason) => {
-    if (reason === 'clickaway') {
-      return;
-    }
-    setShowSuccess(false);
-  };
-
-  // Load users belonging to this dealer
   const load = async () => {
     setLoading(true);
     setError('');
     try {
       const data = await listMyDealerUsers();
       const safeData = Array.isArray(data) ? data : [];
+      let filtered = [];
 
-      let filtered = safeData;
-
+      const myId = authUser?._id || authUser?.id;
       if (authUser?.role === 'dealer_admin') {
-        // show all except self (dealer_admin) - wait, maybe show other DAs? 
-        // Assuming we want to manage Branch Admins and Dealer Users
-        filtered = safeData.filter(u => u.username !== authUser.username);
+        // dealer_admin sees branch_admin and dealer_user they created
+        filtered = safeData.filter(u =>
+          u.created_by_user_id === myId &&
+          (u.role === 'branch_admin' || u.role === 'dealer_user')
+        );
       } else if (authUser?.role === 'branch_admin') {
-        // Filter already done by backend, just safety check
-        filtered = safeData.filter(u => u.branch_id === authUser.branch_id);
+        // branch_admin sees only dealer_user they created in their branch
+        filtered = safeData.filter(u =>
+          u.created_by_user_id === myId &&
+          u.role === 'dealer_user' &&
+          u.branch_id === authUser.branch_id
+        );
       }
       setUsers(filtered);
     } catch (err) {
       console.error('Error loading users:', err);
-      setError('Failed to load users. Please try again.');
+      setError('Failed to load users.');
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (authUser?.dealer_id) load();
-  }, [authUser]);
-
-  // Reset dialog form when closing
-  useEffect(() => {
-    if (!open) {
-      setForm({
-        username: '',
-        email: '',
-        password: '',
-        role: authUser?.role === 'branch_admin' ? 'dealer_user' : 'dealer_user',
-        dealer_id: authUser?.dealer_id || '',
-        branch_id: authUser?.branch_id || '',
-        branch_name: authUser?.branch_name || '',
-        job_title: '',
-        phone_number: ''
-      });
-      setEditingUser(null);
-      setError('');
-      setShowPassword(false);
+    if (authUser?.dealer_id) {
+      load();
     }
-  }, [open, authUser]);
+    // eslint-disable-next-line
+  }, [authUser]);
 
   const handleEdit = (user) => {
     setEditingUser(user);
     setForm({
+      title: 'Mr',
       username: user.username,
       email: user.email,
       password: user.plain_password || '',
@@ -361,54 +134,56 @@ export default function DealerUsers() {
       dealer_id: user.dealer_id,
       branch_id: user.branch_id || '',
       branch_name: user.branch_name || '',
-      job_title: user.job_title || '',
+      job_title: user.job_title && allowedJobTitles.includes(user.job_title)
+        ? user.job_title
+        : '',
       phone_number: user.phone_number || ''
     });
-    setOpen(true);
+    setViewState('edit');
+  };
+
+  const handleCreateNew = () => {
+    setEditingUser(null);
+    // Default to the lowest role the creator can assign
+    const defaultRole = authUser?.role === 'dealer_admin' ? 'branch_admin' : 'dealer_user';
+    setForm({
+      title: 'Mr',
+      username: '',
+      email: '',
+      password: '',
+      role: defaultRole,
+      dealer_id: authUser?.dealer_id || '',
+      branch_id: authUser?.branch_id || '',
+      branch_name: authUser?.branch_name || '',
+      job_title: '',
+      phone_number: ''
+    });
+    setViewState('create');
   };
 
   const handleDelete = async (id) => {
-    if (!window.confirm('Are you sure you want to delete this user? This action cannot be undone.')) return;
+    if (!window.confirm('Are you sure you want to mark this user as a Leaver/Delete?')) return;
     try {
       await deleteDealerUser(id);
       await load();
-      showSuccessMessage('User deleted successfully!');
+      showSuccessMsg('User successfully removed.');
+      if (viewState === 'edit') setViewState('list');
     } catch (err) {
-      console.error('Failed to delete user:', err);
-      setError('Failed to delete user. Please try again.');
+      setError('Failed to delete user.');
     }
   };
 
   const validateForm = () => {
-    if (!form.username.trim()) {
-      setError('Username is required');
-      return false;
-    }
-    if (!form.email.trim()) {
-      setError('Email is required');
-      return false;
-    }
-    if (!editingUser && !form.password) {
-      setError('Password is required for new users');
-      return false;
-    }
-    if (form.password && form.password.length < 6) {
-      setError('Password must be at least 6 characters long');
-      return false;
-    }
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(form.email)) {
-      setError('Please enter a valid email address');
-      return false;
-    }
-    return true;
+    if (!form.username.trim()) return 'Name is required';
+    if (!form.email.trim()) return 'Email is required';
+    if (viewState === 'create' && (!form.password || form.password.length < 6)) return 'Password must be at least 6 characters';
+    return null;
   };
 
   const handleSubmit = async () => {
-    if (!validateForm()) {
-      // Scroll to top of dialog content to show error
-      const dialogContent = document.querySelector('.MuiDialogContent-root');
-      if (dialogContent) dialogContent.scrollTo({ top: 0, behavior: 'smooth' });
+    const errorMsg = validateForm();
+    if (errorMsg) {
+      setError(errorMsg);
       return;
     }
 
@@ -417,689 +192,345 @@ export default function DealerUsers() {
         const updated = { ...form };
         if (!updated.password) delete updated.password;
         await updateDealerUser(editingUser._id || editingUser.id, updated);
-        showSuccessMessage('User updated successfully!');
+        showSuccessMsg('Profile updated successfully!');
       } else {
         await createDealerUser(form);
-        showSuccessMessage('User created successfully!');
+        showSuccessMsg('User created successfully!');
       }
-      setOpen(false);
+      setViewState('list');
       await load();
     } catch (err) {
-      console.error('Error saving user:', err);
-      setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to save user. Please try again.');
-      // Scroll to top of dialog content to show error
-      const dialogContent = document.querySelector('.MuiDialogContent-root');
-      if (dialogContent) dialogContent.scrollTo({ top: 0, behavior: 'smooth' });
+      setError(err.response?.data?.detail || err.response?.data?.error || 'Failed to save user.');
     }
   };
 
-  // Filter users based on search term
-  const filteredUsers = users.filter(user =>
-    user.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    user.role.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  // ----- RENDER METHODS -----
+
+  if (loading) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', p: 8 }}>
+        <CircularProgress />
+      </Box>
+    );
+  }
 
   return (
-    <Box sx={{
-      minHeight: '100vh',
-      py: 4
-    }}>
-      <Container maxWidth="xl">
-
-        {/* Global Success Snackbar */}
+    <Box sx={{ minHeight: '100vh', pb: 8, pt: 2, background: THEME.background }}>
+      <Container maxWidth="lg">
         <Snackbar
           open={showSuccess}
-          autoHideDuration={4000}
-          onClose={handleCloseSuccess}
+          autoHideDuration={3000}
+          onClose={() => setShowSuccess(false)}
           anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
-          sx={{
-            '& .MuiSnackbarContent-root': {
-              background: MODERN_BMW_THEME.gradientSuccess,
-              borderRadius: 3,
-              boxShadow: MODERN_BMW_THEME.shadowLg,
-              minWidth: '300px',
-              fontWeight: 500,
-              fontSize: '14px'
-            }
-          }}
         >
-          <Alert
-            onClose={handleCloseSuccess}
-            severity="success"
-            sx={{
-              width: '100%',
-              background: MODERN_BMW_THEME.success,
-              color: 'white',
-              borderRadius: 3,
-              fontWeight: 600,
-              '& .MuiAlert-icon': { color: 'white' },
-              '& .MuiAlert-message': {
-                fontWeight: 600,
-                fontSize: '16px'
-              }
-            }}
-          >
-            {successMessage}
-          </Alert>
+          <Alert severity="success" variant="filled">{successMessage}</Alert>
         </Snackbar>
 
-        {/* Header Section */}
-        <Box sx={{ mb: 6, textAlign: 'center' }}>
-          <Typography
-            variant="h3"
-            sx={{
-              fontWeight: 700,
-              color: MODERN_BMW_THEME.textPrimary,
-              mb: 2,
-              background: MODERN_BMW_THEME.gradientPrimary,
-              backgroundClip: 'text',
-              textFillColor: 'transparent',
-              WebkitBackgroundClip: 'text',
-              WebkitTextFillColor: 'transparent'
-            }}
-          >
-            Team Management
-          </Typography>
-          <Typography
-            variant="h6"
-            sx={{
-              color: MODERN_BMW_THEME.textSecondary,
-              fontWeight: 400,
-              maxWidth: '600px',
-              mx: 'auto',
-              lineHeight: 1.6,
-              mb: 3
-            }}
-          >
-            Manage your dealership team members and their access permissions
-          </Typography>
-
-          {/* Dealer Info Card */}
-          <Card sx={{
-            background: MODERN_BMW_THEME.surfaceElevated,
-            border: `1px solid ${MODERN_BMW_THEME.border}`,
-            borderRadius: 3,
-            boxShadow: MODERN_BMW_THEME.shadowSm,
-            maxWidth: '400px',
-            mx: 'auto',
-            mb: 4
-          }}>
-            <CardContent sx={{ p: 3 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', flexDirection: 'column' }}>
-                <Box sx={{ display: 'flex', alignItems: 'center', mb: 1 }}>
-                  <Business sx={{ color: MODERN_BMW_THEME.primary, mr: 2, fontSize: 24 }} />
-                  <Box sx={{ textAlign: 'center' }}>
-                    <Typography variant="body2" sx={{
-                      color: MODERN_BMW_THEME.textSecondary,
-                      fontWeight: 500,
-                      mb: 0.5
-                    }}>
-                      DEALERSHIP ID
-                    </Typography>
-                    <Typography variant="h6" sx={{
-                      color: MODERN_BMW_THEME.textPrimary,
-                      fontWeight: 700,
-                      fontFamily: 'monospace'
-                    }}>
-                      {authUser?.dealer_id || 'N/A'}
-                    </Typography>
-                  </Box>
-                </Box>
-
-                {/* Access URL */}
-                {authUser?.dealer_id && (
-                  <Box sx={{
-                    mt: 2,
-                    p: 1.5,
-                    background: MODERN_BMW_THEME.successLight,
-                    borderRadius: 2,
-                    border: `1px solid ${MODERN_BMW_THEME.success}80`,
-                    width: '100%',
-                    maxWidth: '320px',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 1,
-                    wordBreak: 'break-all'
-                  }}>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: MODERN_BMW_THEME.success,
-                        fontWeight: 600,
-                        fontFamily: 'monospace',
-                        fontSize: '0.8rem',
-                        flex: 1,
-                        textAlign: 'center'
-                      }}
-                    >
-                      {`${DEALER_USER_BASE_URL}/login?dealer=${authUser.dealer_id}`}
-                    </Typography>
-                    <Tooltip title="Copy Access URL">
-                      <IconButton
-                        size="small"
-                        onClick={() => navigator.clipboard.writeText(
-                          `${DEALER_USER_BASE_URL}/login?dealer=${authUser.dealer_id}`
-                        )}
-                        sx={{
-                          color: MODERN_BMW_THEME.success,
-                          '&:hover': {
-                            background: `${MODERN_BMW_THEME.success}15`
-                          }
-                        }}
-                      >
-                        <ContentCopy fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Box>
-                )}
-              </Box>
-            </CardContent>
-          </Card>
-        </Box>
-
-        {/* Action Bar */}
-        <Box sx={{
-          p: 3,
-          background: MODERN_BMW_THEME.surface,
-          borderRadius: 3,
-          border: `1px solid ${MODERN_BMW_THEME.border}`,
-          mb: 4
-        }}>
-          <Grid container spacing={2} alignItems="center">
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                size="small"
-                placeholder="Search users by name, email, or role..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <Search sx={{ color: MODERN_BMW_THEME.textTertiary }} />
-                    </InputAdornment>
-                  )
-                }}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    background: MODERN_BMW_THEME.background,
-                    borderRadius: 2,
-                    '&:hover fieldset': {
-                      borderColor: MODERN_BMW_THEME.primary,
-                    },
-                  }
-                }}
-              />
-            </Grid>
-            <Grid item xs={12} md={6} sx={{ display: 'flex', justifyContent: { md: 'flex-end' }, gap: 2 }}>
-              <Button
-                startIcon={<Refresh />}
-                onClick={load}
-                disabled={loading}
-                variant="outlined"
-                sx={{
-                  borderColor: MODERN_BMW_THEME.border,
-                  color: MODERN_BMW_THEME.textSecondary,
-                  borderRadius: 2,
-                  fontWeight: 500
-                }}
+        <Box sx={{ mb: 4, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          {viewState !== 'list' ? (
+            <Box>
+              <Button 
+                startIcon={<ArrowBack />} 
+                onClick={() => setViewState('list')}
+                sx={{ mb: 2, color: THEME.textSecondary, textTransform: 'none' }}
               >
-                Refresh
+                Back to User List
               </Button>
-              <Button
-                variant="contained"
-                startIcon={<Add />}
-                onClick={() => setOpen(true)}
-                sx={{
-                  background: MODERN_BMW_THEME.gradientPrimary,
-                  borderRadius: 3,
-                  px: 4,
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  fontSize: '16px',
-                  boxShadow: MODERN_BMW_THEME.shadowMd,
-                  '&:hover': {
-                    boxShadow: MODERN_BMW_THEME.shadowLg,
-                    transform: 'translateY(-1px)'
-                  },
-                  transition: 'all 0.2s ease-in-out'
-                }}
-              >
-                Add Team Member
-              </Button>
-            </Grid>
-          </Grid>
-        </Box>
-
-        {/* Stats Overview - Simplified for Dealer Admin */}
-        <Grid
-          container
-          spacing={3}
-          justifyContent="center"
-          alignItems="stretch"
-          sx={{ mb: 4, textAlign: 'center' }}
-        >
-          <Grid item xs={12} sm={6} md={4} sx={{ display: 'flex', justifyContent: 'center' }}>
-            <Card sx={{
-              width: '100%',
-              maxWidth: 360,
-              background: MODERN_BMW_THEME.surfaceElevated,
-              border: `1px solid ${MODERN_BMW_THEME.border}`,
-              borderRadius: 3,
-              boxShadow: MODERN_BMW_THEME.shadowSm
-            }}>
-              <CardContent sx={{ p: 3, textAlign: 'center' }}>
-                <Group sx={{ fontSize: 40, color: MODERN_BMW_THEME.primary, mb: 2 }} />
-                <Typography variant="h3" sx={{ color: MODERN_BMW_THEME.textPrimary, fontWeight: 700, mb: 1 }}>
-                  {users.length}
-                </Typography>
-                <Typography variant="body1" sx={{ color: MODERN_BMW_THEME.textSecondary, fontWeight: 500 }}>
-                  Total Team Members
-                </Typography>
-              </CardContent>
-            </Card>
-          </Grid>
-
-        </Grid>
-
-        {/* Loading State */}
-        {loading && (
-          <Box sx={{ mb: 4, display: 'flex', justifyContent: 'center' }}>
-            <Box sx={{ width: 360 }}>
-              <LinearProgress sx={{ borderRadius: 2, height: 6 }} />
             </Box>
-          </Box>
-        )}
+          ) : (
+            <Box sx={{ width: '100%' }}>
+              <Box sx={{ background: THEME.primary, color: 'white', p: 2, borderRadius: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <Typography variant="h5" sx={{ fontWeight: 600 }}>
+                  {authUser?.branch_name ? `${authUser.branch_name} - Workshop's Users` : "Dealer Standard - Workshop's Users"}
+                </Typography>
+              </Box>
+            </Box>
+          )}
+        </Box>
 
-        {/* Error Display */}
-        {error && !open && (
-          <Alert
-            severity="error"
-            sx={{
-              mb: 4,
-              borderRadius: 3,
-              maxWidth: 720,
-              mx: 'auto',
-              '& .MuiAlert-message': { fontWeight: 500 }
-            }}
-            onClose={() => setError('')}
-          >
+        {error && (
+          <Alert severity="error" onClose={() => setError('')} sx={{ mb: 3 }}>
             {error}
           </Alert>
         )}
 
-        {/* Users Grid */}
-        {!loading && filteredUsers.length === 0 ? (
-          <Card
-            sx={{
-              background: MODERN_BMW_THEME.surfaceElevated,
-              border: `1px solid ${MODERN_BMW_THEME.border}`,
-              borderRadius: 3,
-              textAlign: 'center',
-              p: 8,
-              boxShadow: MODERN_BMW_THEME.shadowSm,
-              maxWidth: 720,
-              mx: 'auto'
-            }}
-          >
-            <Person sx={{ fontSize: 80, color: MODERN_BMW_THEME.textTertiary, mb: 3, opacity: 0.5 }} />
-            <Typography variant="h4" sx={{ color: MODERN_BMW_THEME.textPrimary, fontWeight: 600, mb: 2 }}>
-              {searchTerm ? 'No Users Found' : 'No Team Members Yet'}
-            </Typography>
-            <Typography
-              variant="body1"
-              sx={{ color: MODERN_BMW_THEME.textSecondary, mb: 4, maxWidth: '400px', mx: 'auto', lineHeight: 1.6 }}
-            >
-              {searchTerm
-                ? 'Try adjusting your search terms to find team members'
-                : 'Get started by adding the first member to your dealership team'}
-            </Typography>
+        {viewState === 'list' && (
+          <Box>
             <Button
               variant="contained"
-              startIcon={<Add />}
-              onClick={() => setOpen(true)}
-              sx={{ background: MODERN_BMW_THEME.gradientPrimary, borderRadius: 3, px: 4, fontWeight: 600 }}
+              startIcon={<PersonOutline />}
+              onClick={handleCreateNew}
+              sx={{ 
+                background: THEME.success, 
+                mb: 3, 
+                '&:hover': { background: '#059669' },
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3
+              }}
             >
-              Add First Member
+              Create New User
             </Button>
-          </Card>
-        ) : (
-          <Grid container spacing={3} justifyContent="center">
-            {filteredUsers.map((user) => (
-              <Grid item xs={12} sm={6} lg={4} key={user._id || user.id} sx={{ display: 'flex', justifyContent: 'center' }}>
-                <Box sx={{ width: '100%', maxWidth: 420 }}>
-                  <UserCard user={user} onEdit={handleEdit} onDelete={handleDelete} />
-                </Box>
-              </Grid>
-            ))}
-          </Grid>
+
+            <TableContainer component={Paper} elevation={0} sx={{ border: `1px solid ${THEME.border}` }}>
+              <Table>
+                <TableHead sx={{ background: '#F1F5F9' }}>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Name</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Created</TableCell>
+                    <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Login Access</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 600, color: THEME.textPrimary }}></TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {users.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={4} align="center" sx={{ py: 4, color: THEME.textSecondary }}>
+                        No users have been created yet.
+                      </TableCell>
+                    </TableRow>
+                  ) : (
+                    users.map(user => (
+                      <TableRow key={user._id || user.id} hover>
+                        <TableCell>
+                          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                            <Box sx={{ p: 1, border: `2px solid #E2E8F0`, borderRadius: '50%', display: 'flex', mr: 2 }}>
+                              <PersonOutline sx={{ color: '#94A3B8' }} />
+                            </Box>
+                            <Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                                <Typography variant="body1" sx={{ color: '#1E293B', fontWeight: 500 }}>
+                                  {user.username}
+                                </Typography>
+                                <Chip
+                                  label={ROLE_LABELS[user.role] || user.role}
+                                  size="small"
+                                  sx={{
+                                    fontSize: '0.65rem',
+                                    height: 18,
+                                    background: user.role === 'branch_admin' ? '#EDE9FE' : '#E0F2FE',
+                                    color: user.role === 'branch_admin' ? '#6D28D9' : '#0369A1',
+                                    fontWeight: 600
+                                  }}
+                                />
+                              </Box>
+                              {user.job_title && (
+                                <Typography variant="caption" sx={{ color: '#94A3B8' }}>
+                                  {user.job_title}
+                                </Typography>
+                              )}
+                            </Box>
+                          </Box>
+                        </TableCell>
+                        <TableCell sx={{ color: THEME.textSecondary, fontSize: '0.9rem' }}>
+                          {user.created_at ? new Date(user.created_at).toLocaleDateString() : 'N/A'}
+                        </TableCell>
+                        <TableCell>
+                          <CheckCircle sx={{ color: THEME.success, fontSize: 20 }} />
+                        </TableCell>
+                        <TableCell align="right" sx={{ whiteSpace: 'nowrap' }}>
+                          <Button 
+                            variant="contained" 
+                            disableElevation
+                            onClick={() => handleEdit(user)}
+                            sx={{ 
+                              background: THEME.secondaryBtn, 
+                              color: 'white',
+                              minWidth: '100px',
+                              textTransform: 'none',
+                              mr: 1,
+                              '&:hover': { background: '#64748B' }
+                            }}
+                          >
+                            View Details
+                          </Button>
+                          <IconButton 
+                            onClick={() => handleDelete(user._id || user.id)}
+                            sx={{ 
+                              background: THEME.error, 
+                              color: 'white',
+                              borderRadius: 1,
+                              '&:hover': { background: '#B91C1C' }
+                            }}
+                            size="small"
+                          >
+                            <Delete fontSize="small" />
+                          </IconButton>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  )}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          </Box>
         )}
 
-        {/* Enhanced User Form Dialog */}
-        <Dialog
-          open={open}
-          onClose={() => setOpen(false)}
-          maxWidth="sm"
-          fullWidth
-          PaperProps={{
-            sx: {
-              background: MODERN_BMW_THEME.background,
-              border: `1px solid ${MODERN_BMW_THEME.border}`,
-              borderRadius: 3,
-              boxShadow: MODERN_BMW_THEME.shadowXl
-            }
-          }}
-        >
-          <DialogTitle sx={{
-            background: MODERN_BMW_THEME.gradientPrimary,
-            color: MODERN_BMW_THEME.background,
-            fontWeight: 600,
-            py: 3
-          }}>
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <Person sx={{ mr: 2, fontSize: 24 }} />
-              {editingUser ? 'Edit Team Member' : 'Add Team Member'}
+        {(viewState === 'edit' || viewState === 'create') && (
+          <Box>
+            {/* Header Match */}
+            <Box sx={{ background: THEME.primary, color: 'white', p: 2, borderRadius: 1, mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                {viewState === 'edit' ? `${form.username} - CitNOW Dashboard` : 'Create New User Profile'}
+              </Typography>
             </Box>
-          </DialogTitle>
 
-          <DialogContent sx={{ mt: 2, p: 3 }}>
-            {error && (
-              <Alert
-                severity="error"
-                sx={{
-                  mb: 3,
-                  borderRadius: 2,
-                  '& .MuiAlert-message': {
-                    fontWeight: 500
-                  }
-                }}
-                onClose={() => setError('')}
-              >
-                {error}
-              </Alert>
-            )}
-
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Username"
-              value={form.username}
-              onChange={(e) => setForm({ ...form, username: e.target.value })}
-              required
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  '&:hover fieldset': {
-                    borderColor: MODERN_BMW_THEME.primary,
-                  },
-                }
-              }}
-            />
-
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Email"
-              type="email"
-              value={form.email}
-              onChange={(e) => setForm({ ...form, email: e.target.value })}
-              required
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  '&:hover fieldset': {
-                    borderColor: MODERN_BMW_THEME.primary,
-                  },
-                }
-              }}
-            />
-
-            <TextField
-              fullWidth
-              margin="normal"
-              type={showPassword ? 'text' : 'password'}
-              label="Password"
-              value={form.password}
-              onChange={(e) => setForm({ ...form, password: e.target.value })}
-              required={!editingUser}
-              helperText={editingUser ? 'Leave blank to keep existing password' : 'Password must be at least 6 characters'}
-              InputProps={{
-                endAdornment: (
-                  <InputAdornment position="end">
-                    <IconButton
-                      onClick={() => setShowPassword(!showPassword)}
-                      edge="end"
-                    >
-                      {showPassword ? <VisibilityOff /> : <Visibility />}
-                    </IconButton>
-                  </InputAdornment>
-                )
-              }}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  '&:hover fieldset': {
-                    borderColor: MODERN_BMW_THEME.primary,
-                  },
-                }
-              }}
-            />
-
-            {/* Role Selection - Only for Dealer Admin */}
-            {authUser?.role === 'dealer_admin' ? (
-              <TextField
-                select
-                fullWidth
-                margin="normal"
-                label="Role"
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value })}
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
-              >
-                <MenuItem value="dealer_user">User</MenuItem>
-                <MenuItem value="branch_admin">Branch Admin</MenuItem>
-              </TextField>
-            ) : (
-              <TextField
-                fullWidth
-                margin="normal"
-                label="Role"
-                value="User"
-                disabled
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                    background: MODERN_BMW_THEME.surface,
-                  }
-                }}
-              />
-            )}
-
-            {/* Branch Name - Only if creating/editing Branch Admin */}
-            {form.role === 'branch_admin' && (
-              <TextField
-                fullWidth
-                margin="normal"
-                label="Branch Name"
-                placeholder="e.g. Downtown Branch"
-                value={form.branch_name}
-                onChange={(e) => setForm({ ...form, branch_name: e.target.value })}
-                required
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
-              />
-            )}
-
-            {/* Branch Selection - Only if Dealer Admin creating Dealer User */}
-            {authUser?.role === 'dealer_admin' && form.role === 'dealer_user' && (
-              <TextField
-                select
-                fullWidth
-                margin="normal"
-                label="Assign to Branch (Optional)"
-                value={form.branch_id}
-                onChange={(e) => {
-                  const selectedBranch = users.find(u => u.branch_id === e.target.value);
-                  setForm({
-                    ...form,
-                    branch_id: e.target.value,
-                    branch_name: selectedBranch ? selectedBranch.branch_name : ''
-                  });
-                }}
-                helperText="Leave empty for direct report to Dealer Admin"
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    borderRadius: 2,
-                  }
-                }}
-              >
-                <MenuItem value="">
-                  <em>None (Direct Report)</em>
-                </MenuItem>
-                {/* Filter mainly distinct branches from users list */}
-                {Array.from(new Set(users.filter(u => u.role === 'branch_admin').map(u => u.branch_id)))
-                  .map(branchId => {
-                    const branch = users.find(u => u.branch_id === branchId);
-                    return (
-                      <MenuItem key={branchId} value={branchId}>
-                        {branch?.branch_name || 'Unnamed Branch'}
-                      </MenuItem>
-                    );
-                  })
-                }
-              </TextField>
-            )}
-
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Job Title"
-              value={form.job_title}
-              onChange={(e) => setForm({ ...form, job_title: e.target.value })}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                }
-              }}
-            />
-
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Phone Number"
-              value={form.phone_number}
-              onChange={(e) => setForm({ ...form, phone_number: e.target.value })}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                }
-              }}
-            />
-
-            <TextField
-              fullWidth
-              margin="normal"
-              label="Dealer ID"
-              value={form.dealer_id}
-              disabled
-              helperText="Automatically assigned to your dealership"
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: 2,
-                  background: MODERN_BMW_THEME.surface,
-                }
-              }}
-            />
-
-            {/* ACCESS URL PREVIEW - Only show for dealer users */}
-            {form.role === 'dealer_user' && form.username && form.dealer_id && (
-              <Box sx={{ mt: 3, p: 2, background: MODERN_BMW_THEME.successLight, borderRadius: 2 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: MODERN_BMW_THEME.success }}>
-                  Dealer Portal Access URL
+            {/* Leaver Section (Only on edit) */}
+            {viewState === 'edit' && (
+              <Paper elevation={0} sx={{ p: 4, mb: 4, border: `1px solid ${THEME.border}`, borderRadius: 2 }}>
+                <Typography variant="h6" sx={{ color: THEME.textPrimary, mb: 1, fontWeight: 600 }}>
+                  Has {form.username} left the company?
                 </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <Typography variant="body2" sx={{
-                    color: MODERN_BMW_THEME.success,
+                <Typography variant="body2" sx={{ color: THEME.textSecondary, mb: 3 }}>
+                  If this user has left, you can mark their account as "Leaver". This will stop them accessing the service.<br/><br/>
+                  When a user is marked as a Leaver their videos are not deleted and still appear in reports.
+                </Typography>
+                <Button 
+                  variant="contained" 
+                  onClick={() => handleDelete(editingUser._id || editingUser.id)}
+                  sx={{ 
+                    background: THEME.error, 
+                    textTransform: 'none', 
                     fontWeight: 600,
-                    fontFamily: 'monospace',
-                    fontSize: '0.8rem',
-                    flex: 1,
-                    wordBreak: 'break-all'
-                  }}>
-                    {`${DEALER_USER_BASE_URL}/login?dealer=${form.dealer_id}&username=${form.username}`}
-                  </Typography>
-                  <Tooltip title="Copy Access URL">
-                    <IconButton
-                      size="small"
-                      onClick={() => navigator.clipboard.writeText(
-                        `${DEALER_USER_BASE_URL}/login?dealer=${form.dealer_id}&username=${form.username}`
-                      )}
-                      sx={{
-                        color: MODERN_BMW_THEME.success,
-                        '&:hover': {
-                          background: `${MODERN_BMW_THEME.success}15`
-                        }
-                      }}
-                    >
-                      <ContentCopy fontSize="small" />
-                    </IconButton>
-                  </Tooltip>
-                </Box>
-                <Typography variant="caption" sx={{ color: MODERN_BMW_THEME.textSecondary, mt: 1, display: 'block' }}>
-                  Share this URL with the user to access the dealer portal
-                </Typography>
-              </Box>
+                    px: 3,
+                    '&:hover': { background: '#B91C1C' }
+                  }}
+                >
+                  Mark as Leaver
+                </Button>
+              </Paper>
             )}
-          </DialogContent>
 
-          <DialogActions sx={{ px: 3, pb: 3 }}>
-            <Button
-              onClick={() => setOpen(false)}
-              variant="outlined"
-              sx={{
-                borderColor: MODERN_BMW_THEME.border,
-                color: MODERN_BMW_THEME.textSecondary,
-                borderRadius: 2,
-                px: 3,
-                fontWeight: 500,
-                '&:hover': {
-                  borderColor: MODERN_BMW_THEME.textSecondary,
-                  color: MODERN_BMW_THEME.textPrimary
-                }
-              }}
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="contained"
-              onClick={handleSubmit}
-              sx={{
-                background: MODERN_BMW_THEME.gradientPrimary,
-                borderRadius: 2,
-                px: 4,
-                fontWeight: 600,
-                boxShadow: MODERN_BMW_THEME.shadowMd,
-                '&:hover': {
-                  boxShadow: MODERN_BMW_THEME.shadowLg,
-                  transform: 'translateY(-1px)'
-                },
-                transition: 'all 0.2s ease-in-out'
-              }}
-            >
-              {editingUser ? 'Update' : 'Create'}
-            </Button>
-          </DialogActions>
-        </Dialog>
+            <Grid container spacing={4}>
+              <Grid item xs={12} md={8}>
+                <Typography variant="h5" sx={{ color: THEME.textPrimary, fontWeight: 700, mb: 1 }}>
+                  Account Details
+                </Typography>
+                <Typography variant="body2" sx={{ color: THEME.textSecondary, mb: 4 }}>
+                  You can update this profile using the form below. We'll use some of these details on customer facing pages, so please make sure they are accurate—we don't want any mistakes!
+                </Typography>
+
+                <Grid container spacing={3}>
+                  {/* Role selector — only shown when creating, for dealer_admin */}
+                  {viewState === 'create' && authUser?.role === 'dealer_admin' && (
+                    <Grid item xs={12} sm={6}>
+                      <TextField
+                        fullWidth
+                        label="Role *"
+                        select
+                        value={form.role}
+                        onChange={(e) => setForm({ ...form, role: e.target.value, job_title: '' })}
+                        InputProps={{ sx: { background: THEME.surface } }}
+                      >
+                        {(CREATABLE_ROLES[authUser?.role] || []).map((r) => (
+                          <MenuItem key={r.value} value={r.value}>{r.label}</MenuItem>
+                        ))}
+                      </TextField>
+                    </Grid>
+                  )}
+
+                  <Grid item xs={12} sm={6}>
+                    <TextField
+                      fullWidth
+                      label="Job Title"
+                      select
+                      value={form.job_title}
+                      onChange={(e) => setForm({ ...form, job_title: e.target.value })}
+                      InputProps={{ sx: { background: THEME.surface } }}
+                    >
+                      {allowedJobTitles.map((title) => (
+                        <MenuItem key={title || 'Other'} value={title === 'Other' ? '' : title}>
+                          {title}
+                        </MenuItem>
+                      ))}
+                    </TextField>
+                  </Grid>
+
+                  <Grid item xs={12} sm={6}>
+                    {/* Placeholder for spacer */}
+                  </Grid>
+
+
+
+                  <Grid item xs={12} sm={12}>
+                    <TextField
+                      fullWidth
+                      label="Full Name *"
+                      value={form.username}
+                      onChange={(e) => setForm({ ...form, username: e.target.value })}
+                      InputProps={{ sx: { background: THEME.surface } }}
+                    />
+                  </Grid>
+
+
+
+                  <Grid item xs={12} sm={12}>
+                    <TextField
+                      fullWidth
+                      label={viewState === 'create' ? "Password *" : "Password (leave blank to keep)"}
+                      type="password"
+                      value={form.password}
+                      onChange={(e) => setForm({ ...form, password: e.target.value })}
+                      InputProps={{ sx: { background: THEME.surface } }}
+                    />
+                  </Grid>
+                </Grid>
+              </Grid>
+
+              {/* Right Sidebar form area */}
+              <Grid item xs={12} md={4}>
+                <Box sx={{ mt: { xs: 0, md: 8 } }}>
+                  <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>Biography (0/450)</Typography>
+                  <TextField 
+                    fullWidth 
+                    multiline 
+                    rows={4} 
+                    disabled
+                    placeholder="Coming soon..."
+                    helperText="We will automatically append the phone number onto the end of this biography."
+                    InputProps={{ sx: { background: THEME.surface } }}
+                    sx={{ mb: 3 }}
+                  />
+
+
+
+                  {/* Information Box */}
+                  <Box sx={{ mt: 4, background: '#F1F5F9', p: 3, borderRadius: 2, border: `1px solid ${THEME.border}` }}>
+                    <Typography variant="h6" sx={{ fontWeight: 700, mb: 2, color: THEME.textPrimary }}>
+                      Information
+                    </Typography>
+                    <Box component="ul" sx={{ color: THEME.textPrimary, m: 0, pl: 2, '& li': { mb: 1, fontSize: '0.9rem' } }}>
+                      <li>This user is offline.</li>
+                      {editingUser?.created_at && (
+                        <li>Created on {new Date(editingUser.created_at).toLocaleDateString()}.</li>
+                      )}
+                      <li>Last logged in on {new Date().toLocaleDateString()}.</li>
+                    </Box>
+                  </Box>
+                </Box>
+              </Grid>
+            </Grid>
+
+            {/* Action Footer */}
+            <Box sx={{ mt: 5, pt: 3, borderTop: `1px solid ${THEME.border}`, display: 'flex', justifyContent: 'flex-start' }}>
+              <Button 
+                variant="contained" 
+                onClick={handleSubmit}
+                sx={{ 
+                  background: THEME.success, 
+                  textTransform: 'none', 
+                  fontWeight: 600,
+                  px: 4,
+                  '&:hover': { background: '#059669' }
+                }}
+              >
+                {viewState === 'create' ? 'Save New User' : 'Update Profile'}
+              </Button>
+            </Box>
+          </Box>
+        )}
+
       </Container>
-    </Box >
+    </Box>
   );
 }

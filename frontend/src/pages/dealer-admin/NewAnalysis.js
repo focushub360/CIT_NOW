@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTasks } from '../../contexts/TaskContext';
 import {
   Card, CardContent, Grid, TextField, MenuItem, Button, Typography, Alert,
-  Box, LinearProgress, Chip, Paper, IconButton, Tooltip, Container
+  Box, LinearProgress, Chip, Paper, IconButton, Tooltip, Container, CircularProgress
 } from '@mui/material';
 import {
   PlayArrow, Check, Error, Schedule, Refresh,
@@ -10,35 +10,37 @@ import {
 } from '@mui/icons-material';
 import api from '../../services/api';
 
-// Use the same BMW theme from your dashboard
-const MODERN_BMW_THEME = {
-  primary: '#1C69D4',
-  primaryDark: '#0A4B9C',
-  primaryLight: '#4D8FDF',
-  primaryUltraLight: '#E8F1FD',
-  accent: '#FF6D00',
-  accentLight: '#FF9D45',
-  accentUltraLight: '#FFF3E8',
+// CitNOW / BMW Branding Theme
+const CN_THEME = {
+  primary: '#1C3FAA',
+  primaryDark: '#0E2A80',
+  primaryLight: '#4B6BCC',
+  primaryUltraLight: '#EEF2FF',
+  accent: '#F5B800',
+  accentLight: '#FFFBEB',
+  accentUltraLight: '#FFFDF5',
+  orange: '#FF6600',
+  orangeLight: '#FFF0E6',
   background: '#FFFFFF',
-  surface: '#F8FAFC',
+  surface: '#FAFBFC',
   surfaceElevated: '#FFFFFF',
-  border: '#E2E8F0',
+  border: '#E8EDF5',
   borderLight: '#F1F5F9',
-  textPrimary: '#1E293B',
-  textSecondary: '#64748B',
-  textTertiary: '#94A3B8',
+  textPrimary: '#0A1929',
+  textSecondary: '#3E5060',
+  textTertiary: '#6B7A90',
   success: '#10B981',
-  successLight: '#D1FAE5',
-  warning: '#F59E0B',
-  warningLight: '#FEF3C7',
-  error: '#EF4444',
-  errorLight: '#FEE2E2',
-  gradientPrimary: 'linear-gradient(135deg, #1C69D4 0%, #0A4B9C 100%)',
-  gradientAccent: 'linear-gradient(135deg, #FF6D00 0%, #FF8A00 100%)',
+  successLight: '#EEFDF4',
+  warning: '#F5B800',
+  warningLight: '#FFFBEB',
+  error: '#E82A1F',
+  errorLight: '#FEF2F2',
+  gradientPrimary: 'linear-gradient(135deg, #1C3FAA 0%, #0E2A80 100%)',
+  gradientAccent: 'linear-gradient(135deg, #F5B800 0%, #FF6600 100%)',
   gradientSuccess: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-  shadowSm: '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
-  shadowMd: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-  shadowLg: '0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05)',
+  shadowSm: '0 4px 20px rgba(0,0,0,0.03)',
+  shadowMd: '0 8px 30px rgba(28,63,170,0.08)',
+  shadowLg: '0 12px 40px rgba(28,63,170,0.12)',
 };
 
 const LANGS = [
@@ -63,31 +65,31 @@ const LANGS = [
 const STATUS_CONFIG = {
   pending: {
     color: 'default',
-    icon: <Schedule sx={{ color: MODERN_BMW_THEME.textTertiary }} />,
+    icon: <Schedule sx={{ color: CN_THEME.textTertiary }} />,
     label: 'Pending',
-    bgColor: MODERN_BMW_THEME.surface,
-    textColor: MODERN_BMW_THEME.textTertiary
+    bgColor: CN_THEME.surface,
+    textColor: CN_THEME.textTertiary
   },
   processing: {
     color: 'primary',
-    icon: <Refresh sx={{ color: MODERN_BMW_THEME.primary }} />,
+    icon: <Refresh sx={{ color: CN_THEME.primary }} />,
     label: 'Processing',
-    bgColor: MODERN_BMW_THEME.primaryUltraLight,
-    textColor: MODERN_BMW_THEME.primary
+    bgColor: CN_THEME.primaryUltraLight,
+    textColor: CN_THEME.primary
   },
   completed: {
     color: 'success',
-    icon: <Check sx={{ color: MODERN_BMW_THEME.success }} />,
+    icon: <Check sx={{ color: CN_THEME.success }} />,
     label: 'Completed',
-    bgColor: MODERN_BMW_THEME.successLight,
-    textColor: MODERN_BMW_THEME.success
+    bgColor: CN_THEME.successLight,
+    textColor: CN_THEME.success
   },
   failed: {
     color: 'error',
-    icon: <Error sx={{ color: MODERN_BMW_THEME.error }} />,
+    icon: <Error sx={{ color: CN_THEME.error }} />,
     label: 'Failed',
-    bgColor: MODERN_BMW_THEME.errorLight,
-    textColor: MODERN_BMW_THEME.error
+    bgColor: CN_THEME.errorLight,
+    textColor: CN_THEME.error
   }
 };
 
@@ -99,6 +101,8 @@ export default function NewAnalysis() {
   const [localLoading, setLocalLoading] = useState(false); // Only for submission request
   const [error, setError] = useState('');
   const [currentTaskId, setCurrentTaskId] = useState(null);
+  const [progressPct, setProgressPct] = useState(0);
+  const [resultData, setResultData] = useState(null);
 
   // Derived state: find the task in global context
   const currentTask = tasks.find(t => t.task_id === currentTaskId) || null;
@@ -107,8 +111,37 @@ export default function NewAnalysis() {
   useEffect(() => {
     if (currentTask && (currentTask.status === 'completed' || currentTask.status === 'failed')) {
       setLocalLoading(false);
+      if (currentTask.status === 'completed') {
+        setProgressPct(100);
+        // Fetch the full result inline
+        if (currentTask.result_id) {
+          api.get(`/results/${currentTask.result_id}`)
+            .then(res => setResultData(res.data))
+            .catch(err => console.warn('Could not fetch result inline:', err));
+        }
+      }
     }
   }, [currentTask]);
+
+  // Simulate progressive percentage while processing
+  useEffect(() => {
+    if (!currentTask || currentTask.status !== 'processing') return;
+    setProgressPct(prev => (prev < 1 ? 1 : prev)); // start at 1
+    const interval = setInterval(() => {
+      setProgressPct(prev => {
+        if (prev >= 95) return prev; // slow down near end, wait for real completion
+        // Increment faster early, slower later
+        const increment = prev < 30 ? 3 : prev < 60 ? 2 : prev < 80 ? 1 : 0.5;
+        return Math.min(95, prev + increment);
+      });
+    }, 1200);
+    return () => clearInterval(interval);
+  }, [currentTask?.status]);
+
+  // Reset progress when new task starts
+  useEffect(() => {
+    if (currentTaskId) setProgressPct(0);
+  }, [currentTaskId]);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -152,22 +185,26 @@ export default function NewAnalysis() {
     setCurrentTaskId(null);
     setError('');
     setLocalLoading(false);
+    setResultData(null);
+    setProgressPct(0);
   };
 
   return (
     <Container maxWidth="lg" sx={{ py: 4 }}>
       <Box sx={{ textAlign: 'center', mb: 6 }}>
         <Typography
-          variant="h3"
+          variant="h2" // Larger, bolder font
           sx={{
-            fontWeight: 700,
-            color: MODERN_BMW_THEME.textPrimary,
+            fontWeight: 800,
+            letterSpacing: '-1.5px', // Tighter, elite feel
+            color: CN_THEME.textPrimary,
             mb: 2,
-            background: MODERN_BMW_THEME.gradientPrimary,
+            background: CN_THEME.gradientPrimary,
             backgroundClip: 'text',
             textFillColor: 'transparent',
             WebkitBackgroundClip: 'text',
-            WebkitTextFillColor: 'transparent'
+            WebkitTextFillColor: 'transparent',
+            filter: 'drop-shadow(0 4px 12px rgba(28,105,212,0.15))'
           }}
         >
           New Video Analysis
@@ -175,7 +212,7 @@ export default function NewAnalysis() {
         <Typography
           variant="h6"
           sx={{
-            color: MODERN_BMW_THEME.textSecondary,
+            color: CN_THEME.textSecondary,
             fontWeight: 400,
             maxWidth: '600px',
             mx: 'auto',
@@ -189,11 +226,12 @@ export default function NewAnalysis() {
       <Grid container spacing={4} justifyContent="center">
         <Grid item xs={12} md={8}>
           <Card sx={{
-            background: MODERN_BMW_THEME.surfaceElevated,
-            border: `1px solid ${MODERN_BMW_THEME.border}`,
-            borderRadius: 3,
-            boxShadow: MODERN_BMW_THEME.shadowMd,
-            overflow: 'visible'
+            background: CN_THEME.surfaceElevated,
+            border: `1.5px solid ${CN_THEME.border}`,
+            borderRadius: 4,
+            boxShadow: CN_THEME.shadowLg,
+            overflow: 'visible',
+            position: 'relative'
           }}>
             <CardContent sx={{ p: 4 }}>
               {error && (
@@ -202,8 +240,8 @@ export default function NewAnalysis() {
                   sx={{
                     mb: 3,
                     borderRadius: 2,
-                    border: `1px solid ${MODERN_BMW_THEME.errorLight}`,
-                    backgroundColor: MODERN_BMW_THEME.errorLight
+                    border: `1px solid ${CN_THEME.errorLight}`,
+                    backgroundColor: CN_THEME.errorLight
                   }}
                   action={
                     <Button
@@ -230,7 +268,7 @@ export default function NewAnalysis() {
                     mb: 3,
                     borderRadius: 2,
                     backgroundColor: STATUS_CONFIG[currentTask.status]?.bgColor,
-                    border: `1px solid ${MODERN_BMW_THEME.borderLight}`
+                    border: `1px solid ${CN_THEME.borderLight}`
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', mb: 2 }}>
@@ -242,8 +280,8 @@ export default function NewAnalysis() {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        backgroundColor: MODERN_BMW_THEME.background,
-                        border: `1px solid ${MODERN_BMW_THEME.border}`
+                        backgroundColor: CN_THEME.background,
+                        border: `1px solid ${CN_THEME.border}`
                       }}>
                         {STATUS_CONFIG[currentTask.status]?.icon}
                       </Box>
@@ -251,7 +289,7 @@ export default function NewAnalysis() {
                         <Typography variant="h6" fontWeight="600" sx={{ color: STATUS_CONFIG[currentTask.status]?.textColor }}>
                           Analysis {STATUS_CONFIG[currentTask.status]?.label}
                         </Typography>
-                        <Typography variant="body2" sx={{ color: MODERN_BMW_THEME.textSecondary, mt: 0.5 }}>
+                        <Typography variant="body2" sx={{ color: CN_THEME.textSecondary, mt: 0.5 }}>
                           Task ID: {currentTask.task_id}
                         </Typography>
                       </Box>
@@ -269,23 +307,148 @@ export default function NewAnalysis() {
                   </Box>
 
                   {currentTask.status === 'processing' && (
-                    <Box sx={{ mb: 2 }}>
-                      <LinearProgress
-                        sx={{
-                          height: 6,
-                          borderRadius: 3,
-                          backgroundColor: MODERN_BMW_THEME.borderLight,
-                          '& .MuiLinearProgress-bar': {
-                            backgroundColor: MODERN_BMW_THEME.primary,
-                            borderRadius: 3
+                    <Box sx={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      py: 5, 
+                      mb: 2,
+                      background: '#0a0a0a', // Deep black like the reference
+                      borderRadius: 4,
+                      boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                      border: '1px solid #222'
+                    }}>
+                      <Box sx={{ position: 'relative', display: 'inline-flex', mb: 3 }}>
+                        {/* Background Circle */}
+                        <CircularProgress
+                          variant="determinate"
+                          value={100}
+                          size={130}
+                          thickness={4}
+                          sx={{ color: '#222' }} // Dark track
+                        />
+                        {/* Progress Circle (Lime Green like reference) */}
+                        <CircularProgress
+                          variant="determinate"
+                          value={progressPct}
+                          size={130}
+                          thickness={5}
+                          sx={{
+                            color: '#A3E635', // Lime green
+                            position: 'absolute',
+                            left: 0,
+                            '& .MuiCircularProgress-circle': {
+                              strokeLinecap: 'round',
+                              transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)',
+                            },
+                          }}
+                        />
+                        <Box
+                          sx={{
+                            top: 0,
+                            left: 0,
+                            bottom: 0,
+                            right: 0,
+                            position: 'absolute',
+                            display: 'flex',
+                            flexDirection: 'column',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Typography variant="h3" component="div" fontWeight="800" sx={{ 
+                            color: '#FFFFFF', 
+                            letterSpacing: '-1px',
+                            fontFamily: '"Orbitron", "Roboto", sans-serif' // Futuristic font feel
+                          }}>
+                            {Math.round(progressPct)}<Box component="span" sx={{ fontSize: '1.5rem', ml: 0.5 }}>%</Box>
+                          </Typography>
+                        </Box>
+                      </Box>
+                      <Typography variant="subtitle2" sx={{ 
+                        color: '#A3E635', 
+                        fontWeight: 700, 
+                        letterSpacing: '2px', 
+                        textTransform: 'uppercase',
+                        fontSize: '0.75rem',
+                        opacity: 0.9
+                      }}>
+                        {currentTask.message || "ANALYZING VIDEO CONTENT"}
+                      </Typography>
+                      {/* Sub-text pulse animation hint */}
+                      <Box sx={{ 
+                        mt: 1, 
+                        width: '40px', 
+                        height: '2px', 
+                        background: '#A3E635', 
+                        borderRadius: 1,
+                        animation: 'pulse 2s infinite'
+                      }} />
+                      <style>
+                        {`
+                          @keyframes pulse {
+                            0% { opacity: 0.3; width: 20px; }
+                            50% { opacity: 1; width: 60px; }
+                            100% { opacity: 0.3; width: 20px; }
                           }
-                        }}
-                      />
+                        `}
+                      </style>
+                    </Box>
+                  )}
+
+                  {currentTask.status === 'completed' && (
+                    <Box sx={{ 
+                      display: 'flex', 
+                      flexDirection: 'column', 
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      py: 5, 
+                      mb: 2,
+                      background: '#0a0a0a',
+                      borderRadius: 4,
+                      border: `1px solid ${CN_THEME.success}40`,
+                      boxShadow: `0 10px 30px ${CN_THEME.success}15`
+                    }}>
+                      <Box sx={{ position: 'relative', display: 'inline-flex', mb: 3 }}>
+                        <CircularProgress
+                          variant="determinate"
+                          value={100}
+                          size={130}
+                          thickness={5}
+                          sx={{
+                            color: CN_THEME.success,
+                            '& .MuiCircularProgress-circle': {
+                              strokeLinecap: 'round',
+                            },
+                          }}
+                        />
+                        <Box
+                          sx={{
+                            top: 0,
+                            left: 0,
+                            bottom: 0,
+                            right: 0,
+                            position: 'absolute',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                          }}
+                        >
+                          <Check sx={{ color: CN_THEME.success, fontSize: '4rem' }} />
+                        </Box>
+                      </Box>
+                      <Typography variant="h6" sx={{ color: '#FFFFFF', fontWeight: 800, textTransform: 'uppercase' }}>
+                        Analysis Complete
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: CN_THEME.success, fontWeight: 600, mt: 1 }}>
+                        READY FOR REVIEW
+                      </Typography>
                     </Box>
                   )}
 
                   {currentTask.message && (
-                    <Typography variant="body2" sx={{ color: MODERN_BMW_THEME.textPrimary, mb: 1 }}>
+                    <Typography variant="body2" sx={{ color: CN_THEME.textPrimary, mb: 1 }}>
                       {currentTask.message}
                     </Typography>
                   )}
@@ -298,12 +461,12 @@ export default function NewAnalysis() {
                       p: 2,
                       mt: 2,
                       borderRadius: 2,
-                      backgroundColor: MODERN_BMW_THEME.successLight,
-                      border: `1px solid ${MODERN_BMW_THEME.success}20`
+                      backgroundColor: CN_THEME.successLight,
+                      border: `1px solid ${CN_THEME.success}20`
                     }}>
-                      <Check sx={{ color: MODERN_BMW_THEME.success }} />
-                      <Typography variant="body2" fontWeight="600" sx={{ color: MODERN_BMW_THEME.success }}>
-                        Analysis completed successfully! Result ID: {currentTask.result_id}
+                      <Check sx={{ color: CN_THEME.success }} />
+                      <Typography variant="body2" fontWeight="600" sx={{ color: CN_THEME.success }}>
+                        Analysis completed successfully!
                       </Typography>
                     </Box>
                   )}
@@ -316,16 +479,203 @@ export default function NewAnalysis() {
                       p: 2,
                       mt: 2,
                       borderRadius: 2,
-                      backgroundColor: MODERN_BMW_THEME.errorLight,
-                      border: `1px solid ${MODERN_BMW_THEME.error}20`
+                      backgroundColor: CN_THEME.errorLight,
+                      border: `1px solid ${CN_THEME.error}20`
                     }}>
-                      <Error sx={{ color: MODERN_BMW_THEME.error }} />
-                      <Typography variant="body2" fontWeight="600" sx={{ color: MODERN_BMW_THEME.error }}>
+                      <Error sx={{ color: CN_THEME.error }} />
+                      <Typography variant="body2" fontWeight="600" sx={{ color: CN_THEME.error }}>
                         Error: {currentTask.error_message}
                       </Typography>
                     </Box>
                   )}
                 </Paper>
+              )}
+
+              {/* ─── Inline Result Display ─── */}
+              {resultData && (
+                <Box sx={{ mt: 3 }}>
+                  <Typography variant="h6" fontWeight="700" sx={{
+                    color: CN_THEME.textPrimary, mb: 2,
+                    display: 'flex', alignItems: 'center', gap: 1
+                  }}>
+                    <Check sx={{ color: CN_THEME.success }} /> Analysis Result
+                  </Typography>
+
+                  {/* Score Cards */}
+                  <Grid container spacing={2} sx={{ mb: 3 }}>
+                    {[
+                      { label: 'Video Quality', value: resultData.video_analysis?.quality_score ?? resultData.video_quality_score ?? 0, color: CN_THEME.primary },
+                      { label: 'Audio Quality', value: resultData.audio_analysis?.score ?? resultData.audio_quality_score ?? 0, color: CN_THEME.accent },
+                      { label: 'Overall Score', value: resultData.overall_quality?.overall_score ?? resultData.overall_quality_score ?? 0, color: CN_THEME.success },
+                    ].map(({ label, value, color }) => (
+                      <Grid item xs={4} key={label}>
+                        <Paper elevation={0} sx={{
+                          p: 2, borderRadius: 2, textAlign: 'center',
+                          border: `1px solid ${CN_THEME.border}`,
+                          background: CN_THEME.surface
+                        }}>
+                          <Typography variant="h4" fontWeight="700" sx={{ color }}>
+                            {Number(value).toFixed(1)}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: CN_THEME.textSecondary, fontWeight: 600 }}>
+                            {label}
+                          </Typography>
+                        </Paper>
+                      </Grid>
+                    ))}
+                  </Grid>
+
+                  {/* Vehicle & Case Details */}
+                  {resultData.citnow_metadata && (() => {
+                    const m = resultData.citnow_metadata;
+                    const details = [
+                      { label: '🚗 Vehicle', value: m.vehicle || m.registration || m.reg_no || m.vehicle_number || '—' },
+                      { label: '🔖 Registration', value: m.registration || m.reg_no || '—' },
+                      { label: '🔢 VIN', value: m.vin || '—' },
+                      { label: '🏢 Dealership', value: m.dealership || '—' },
+                      { label: '👤 Service Advisor', value: m.service_advisor || '—' },
+                      { label: '📧 Email', value: m.email || '—' },
+                      { label: '📞 Phone', value: m.phone || '—' },
+                    ].filter(d => d.value && d.value !== '—');
+
+                    return (
+                      <>
+                        {/* Real Rating / Satisfaction (If available) */}
+                        {(m.star_rating !== undefined || m.customer_feedback) && (
+                          <Paper elevation={0} sx={{
+                            p: 2.5, mb: 2, borderRadius: 2,
+                            border: `1px solid ${CN_THEME.success}30`,
+                            background: `${CN_THEME.success}05`
+                          }}>
+                            <Typography variant="subtitle2" fontWeight="700" sx={{ color: CN_THEME.success, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                              ⭐ Customer Satisfaction (Real Rating)
+                            </Typography>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: m.customer_feedback ? 2 : 0 }}>
+                              {m.star_rating !== undefined && (
+                                <Box sx={{ display: 'flex', gap: 0.5 }}>
+                                  {[1, 2, 3, 4, 5].map((star) => (
+                                    <Typography key={star} sx={{ 
+                                      color: star <= m.star_rating ? '#FFB400' : '#E0E0E0',
+                                      fontSize: '24px',
+                                      lineHeight: 1
+                                    }}>
+                                      ★
+                                    </Typography>
+                                  ))}
+                                  <Typography sx={{ ml: 1, fontWeight: 700, color: CN_THEME.textPrimary }}>
+                                    {m.star_rating}/5
+                                  </Typography>
+                                </Box>
+                              )}
+                            </Box>
+                            {m.customer_feedback && (
+                              <Box sx={{ p: 1.5, background: '#FFFFFF', borderRadius: 1.5, borderLeft: `3px solid ${CN_THEME.success}` }}>
+                                <Typography variant="body2" italic sx={{ color: CN_THEME.textSecondary }}>
+                                  "{m.customer_feedback}"
+                                </Typography>
+                              </Box>
+                            )}
+                          </Paper>
+                        )}
+
+                        {details.length > 0 && (
+                          <Paper elevation={0} sx={{
+                            p: 2.5, mb: 2, borderRadius: 2,
+                            border: `1px solid ${CN_THEME.border}`,
+                            background: CN_THEME.surface
+                          }}>
+                            <Typography variant="subtitle2" fontWeight="700" sx={{ color: CN_THEME.textPrimary, mb: 1.5 }}>
+                              🚘 Vehicle & Case Details
+                            </Typography>
+                            <Grid container spacing={1.5}>
+                              {details.map(({ label, value }) => (
+                                <Grid item xs={12} sm={6} key={label}>
+                                  <Box sx={{ display: 'flex', gap: 1, alignItems: 'flex-start' }}>
+                                    <Typography variant="caption" sx={{ color: CN_THEME.textTertiary, fontWeight: 600, minWidth: 120 }}>
+                                      {label}
+                                    </Typography>
+                                    <Typography variant="caption" sx={{ color: CN_THEME.textPrimary, fontWeight: 500, wordBreak: 'break-word' }}>
+                                      {value}
+                                    </Typography>
+                                  </Box>
+                                </Grid>
+                              ))}
+                            </Grid>
+                          </Paper>
+                        )}
+                      </>
+                    );
+                  })()}
+
+                  {/* Transcription */}
+                  {resultData.transcription?.text && (
+                    <Paper elevation={0} sx={{
+                      p: 2.5, mb: 2, borderRadius: 2,
+                      border: `1px solid ${CN_THEME.border}`,
+                      background: CN_THEME.surface
+                    }}>
+                      <Typography variant="subtitle2" fontWeight="700" sx={{ color: CN_THEME.textPrimary, mb: 1 }}>
+                        📝 Transcription
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: CN_THEME.textSecondary, lineHeight: 1.7 }}>
+                        {resultData.transcription.text}
+                      </Typography>
+                    </Paper>
+                  )}
+
+                  {/* Summary */}
+                  {resultData.summarization?.summary && (
+                    <Paper elevation={0} sx={{
+                      p: 2.5, mb: 2, borderRadius: 2,
+                      border: `1px solid ${CN_THEME.border}`,
+                      background: CN_THEME.surface
+                    }}>
+                      <Typography variant="subtitle2" fontWeight="700" sx={{ color: CN_THEME.textPrimary, mb: 1 }}>
+                        💡 Summary
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: CN_THEME.textSecondary, lineHeight: 1.7 }}>
+                        {resultData.summarization.summary}
+                      </Typography>
+                    </Paper>
+                  )}
+
+                  {/* Translation */}
+                  {resultData.translation?.translated_text && (
+                    <Paper elevation={0} sx={{
+                      p: 2.5, mb: 2, borderRadius: 2,
+                      border: `1px solid ${CN_THEME.border}`,
+                      background: CN_THEME.surface
+                    }}>
+                      <Typography variant="subtitle2" fontWeight="700" sx={{ color: CN_THEME.textPrimary, mb: 1 }}>
+                        🌐 Translation
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: CN_THEME.textSecondary, lineHeight: 1.7 }}>
+                        {resultData.translation.translated_text}
+                      </Typography>
+                    </Paper>
+                  )}
+
+                  {/* Overall Label / Quality */}
+                  {resultData.overall_quality?.overall_label && (
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                      <Chip
+                        label={`Quality: ${resultData.overall_quality.overall_label}`}
+                        sx={{
+                          fontWeight: 700,
+                          background: CN_THEME.primaryUltraLight,
+                          color: CN_THEME.primary
+                        }}
+                      />
+                      {resultData.citnow_metadata?.service_advisor && (
+                        <Chip
+                          label={`Advisor: ${resultData.citnow_metadata.service_advisor}`}
+                          variant="outlined"
+                          sx={{ fontWeight: 600 }}
+                        />
+                      )}
+                    </Box>
+                  )}
+                </Box>
               )}
 
               <form onSubmit={submit}>
@@ -335,7 +685,7 @@ export default function NewAnalysis() {
                       fullWidth
                       label={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <VideoCameraBack sx={{ color: MODERN_BMW_THEME.textSecondary, fontSize: 20 }} />
+                          <VideoCameraBack sx={{ color: CN_THEME.textSecondary, fontSize: 20 }} />
                           <span>CitNow Video URL</span>
                         </Box>
                       }
@@ -347,7 +697,18 @@ export default function NewAnalysis() {
                       sx={{
                         '& .MuiOutlinedInput-root': {
                           borderRadius: 2,
-                          backgroundColor: MODERN_BMW_THEME.background,
+                          backgroundColor: CN_THEME.surface,
+                          transition: 'all 0.2s ease',
+                          '& fieldset': { borderColor: CN_THEME.border },
+                          '&:hover fieldset': { borderColor: CN_THEME.primaryLight },
+                          '&.Mui-focused fieldset': {
+                            borderColor: CN_THEME.primary,
+                            borderWidth: '2px'
+                          },
+                          '&.Mui-focused': {
+                            backgroundColor: '#fff',
+                            boxShadow: '0 4px 12px rgba(28, 63, 170, 0.08)'
+                          }
                         }
                       }}
                     />
@@ -359,7 +720,7 @@ export default function NewAnalysis() {
                       select
                       label={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Language sx={{ color: MODERN_BMW_THEME.textSecondary, fontSize: 20 }} />
+                          <Language sx={{ color: CN_THEME.textSecondary, fontSize: 20 }} />
                           <span>Spoken Language</span>
                         </Box>
                       }
@@ -369,7 +730,18 @@ export default function NewAnalysis() {
                       sx={{
                         '& .MuiOutlinedInput-root': {
                           borderRadius: 2,
-                          backgroundColor: MODERN_BMW_THEME.background,
+                          backgroundColor: CN_THEME.surface,
+                          transition: 'all 0.2s ease',
+                          '& fieldset': { borderColor: CN_THEME.border },
+                          '&:hover fieldset': { borderColor: CN_THEME.primaryLight },
+                          '&.Mui-focused fieldset': {
+                            borderColor: CN_THEME.primary,
+                            borderWidth: '2px'
+                          },
+                          '&.Mui-focused': {
+                            backgroundColor: '#fff',
+                            boxShadow: '0 4px 12px rgba(28, 63, 170, 0.08)'
+                          }
                         }
                       }}
                     >
@@ -390,7 +762,7 @@ export default function NewAnalysis() {
                       select
                       label={
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                          <Translate sx={{ color: MODERN_BMW_THEME.textSecondary, fontSize: 20 }} />
+                          <Translate sx={{ color: CN_THEME.textSecondary, fontSize: 20 }} />
                           <span>Target Language</span>
                         </Box>
                       }
@@ -400,7 +772,18 @@ export default function NewAnalysis() {
                       sx={{
                         '& .MuiOutlinedInput-root': {
                           borderRadius: 2,
-                          backgroundColor: MODERN_BMW_THEME.background,
+                          backgroundColor: CN_THEME.surface,
+                          transition: 'all 0.2s ease',
+                          '& fieldset': { borderColor: CN_THEME.border },
+                          '&:hover fieldset': { borderColor: CN_THEME.primaryLight },
+                          '&.Mui-focused fieldset': {
+                            borderColor: CN_THEME.primary,
+                            borderWidth: '2px'
+                          },
+                          '&.Mui-focused': {
+                            backgroundColor: '#fff',
+                            boxShadow: '0 4px 12px rgba(28, 63, 170, 0.08)'
+                          }
                         }
                       }}
                     >
@@ -423,27 +806,28 @@ export default function NewAnalysis() {
                         disabled={localLoading || (currentTask && ['pending', 'processing'].includes(currentTask.status))}
                         startIcon={<PlayArrow />}
                         sx={{
-                          background: MODERN_BMW_THEME.gradientPrimary,
+                          background: CN_THEME.gradientPrimary,
                           borderRadius: 3,
-                          px: 4,
-                          py: 1.5,
-                          fontWeight: 600,
+                          px: 6,
+                          py: 1.8,
+                          fontWeight: 700,
                           textTransform: 'none',
-                          fontSize: '16px',
-                          boxShadow: MODERN_BMW_THEME.shadowMd,
+                          fontSize: '1.05rem',
+                          boxShadow: '0 8px 20px -6px rgba(28, 105, 212, 0.5)',
                           '&:hover': {
-                            boxShadow: MODERN_BMW_THEME.shadowLg,
-                            transform: 'translateY(-1px)'
+                            boxShadow: '0 12px 25px -6px rgba(28, 105, 212, 0.6)',
+                            transform: 'translateY(-2px)'
                           },
                           '&:disabled': {
-                            background: MODERN_BMW_THEME.textTertiary,
-                            transform: 'none'
+                            background: CN_THEME.textTertiary,
+                            transform: 'none',
+                            boxShadow: 'none'
                           },
-                          transition: 'all 0.2s ease-in-out',
-                          minWidth: 140
+                          transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
+                          minWidth: 160
                         }}
                       >
-                        {localLoading ? 'Starting...' : 'Start Analysis'}
+                        {localLoading ? 'Starting Analysis...' : 'Start Analysis'}
                       </Button>
 
                       {(currentTask && (currentTask.status === 'completed' || currentTask.status === 'failed')) && (
@@ -458,11 +842,11 @@ export default function NewAnalysis() {
                             fontWeight: 600,
                             textTransform: 'none',
                             fontSize: '16px',
-                            borderColor: MODERN_BMW_THEME.primary,
-                            color: MODERN_BMW_THEME.primary,
+                            borderColor: CN_THEME.primary,
+                            color: CN_THEME.primary,
                             '&:hover': {
-                              backgroundColor: MODERN_BMW_THEME.primaryUltraLight,
-                              borderColor: MODERN_BMW_THEME.primaryDark
+                              backgroundColor: CN_THEME.primaryUltraLight,
+                              borderColor: CN_THEME.primaryDark
                             }
                           }}
                         >
@@ -473,28 +857,41 @@ export default function NewAnalysis() {
                   </Grid>
                 </Grid>
               </form>
-
               {/* Help section */}
               {!currentTask && (
                 <Paper
                   elevation={0}
                   sx={{
-                    p: 3,
-                    mt: 4,
-                    borderRadius: 2,
-                    backgroundColor: MODERN_BMW_THEME.surface,
-                    border: `1px solid ${MODERN_BMW_THEME.borderLight}`
+                    p: 4,
+                    mt: 5,
+                    borderRadius: 4,
+                    background: `linear-gradient(135deg, ${CN_THEME.surface} 0%, rgba(248, 250, 252, 0.4) 100%)`,
+                    border: '1px solid',
+                    borderColor: 'rgba(28, 105, 212, 0.1)',
+                    position: 'relative',
+                    overflow: 'hidden',
+                    boxShadow: 'inset 0 2px 10px rgba(0,0,0,0.01)'
                   }}
                 >
-                  <Typography variant="h6" fontWeight="600" sx={{ color: MODERN_BMW_THEME.textPrimary, mb: 1 }}>
-                    💡 How it works
+                  {/* Decorative glow inside help box */}
+                  <Box sx={{
+                    position: 'absolute', top: -30, right: -30, width: 100, height: 100,
+                    background: 'radial-gradient(circle, rgba(28,105,212,0.1) 0%, transparent 70%)',
+                    borderRadius: '50%'
+                  }} />
+                  <Typography variant="subtitle1" fontWeight="700" sx={{ color: CN_THEME.primary, mb: 1.5, display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span style={{ fontSize: '1.2rem' }}>💡</span> How it works
                   </Typography>
-                  <Typography variant="body2" sx={{ color: MODERN_BMW_THEME.textSecondary, lineHeight: 1.6 }}>
-                    • Analysis runs in the background - you can continue using the dashboard<br />
-                    • Real-time progress tracking with automatic status updates<br />
-                    • Comprehensive video, audio, and transcription analysis<br />
-                    • Results available immediately upon completion
-                  </Typography>
+                  <Box sx={{
+                    display: 'flex', flexDirection: 'column', gap: 1.5,
+                    '& p': { color: CN_THEME.textSecondary, display: 'flex', alignItems: 'center', gap: 1.5, m: 0, fontSize: '0.95rem' },
+                    '& span.bullet': { color: CN_THEME.primaryLight, fontSize: '1.5rem', lineHeight: 0.5 }
+                  }}>
+                    <p><span className="bullet">•</span> Analysis runs seamlessly in the background — feel free to continue using the dashboard.</p>
+                    <p><span className="bullet">•</span> Real-time progress tracking with automatic status updates.</p>
+                    <p><span className="bullet">•</span> Comprehensive video, audio, and transcription intelligence.</p>
+                    <p><span className="bullet">•</span> Results are beautifully formatted and available immediately upon completion.</p>
+                  </Box>
                 </Paper>
               )}
             </CardContent>

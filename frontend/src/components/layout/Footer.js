@@ -69,41 +69,22 @@ export default function Footer() {
           {/* Brand Section - More Compact */}
           <Grid item xs={12} md={4}>
             <Box sx={{ mb: 2 }}> {/* Reduced from mb: 3 */}
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 1.5 }}> {/* Reduced from mb: 2 */}
-                <Box sx={{
-                  width: 36, // Slightly smaller
-                  height: 36,
-                  borderRadius: 2,
-                  background: MODERN_BMW_THEME.gradientPrimary,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  mr: 1.5 // Reduced from mr: 2
-                }}>
-                  <SmartDisplay sx={{ fontSize: 20, color: '#fff' }} /> {/* Smaller icon */}
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 1.5 }}>
+                <Box sx={{ height: 70, width: 160, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <img
+                    src="/citnow-logo.png"
+                    alt="CitNOW Analytics"
+                    style={{ height: '160px', width: 'auto', objectFit: 'contain' }}
+                  />
                 </Box>
-                <Typography
-                  variant="h6" // Changed from h5 to h6
-                  sx={{
-                    fontWeight: 700,
-                    background: MODERN_BMW_THEME.gradientPrimary,
-                    backgroundClip: 'text',
-                    textFillColor: 'transparent',
-                    WebkitBackgroundClip: 'text',
-                    WebkitTextFillColor: 'transparent'
-                  }}
-                >
-                  CITNOW Analytics
-                </Typography>
+                <Box sx={{ width: '1px', height: 60, bgcolor: '#e0e0e0', flexShrink: 0 }} />
+                <img
+                  src="/focus-technologies-logo.png"
+                  alt="Focus Technologies"
+                  style={{ height: '70px', width: 'auto', objectFit: 'contain' }}
+                />
               </Box>
-              <Typography variant="body2" sx={{
-                color: MODERN_BMW_THEME.textSecondary,
-                lineHeight: 1.5, // Tighter line height
-                mb: 2, // Reduced from mb: 3
-                fontSize: '0.875rem' // Slightly smaller text
-              }}>
-                Advanced video analysis platform for comprehensive quality assessment and performance analytics.
-              </Typography>
+
             </Box>
 
             {/* Social Links */}

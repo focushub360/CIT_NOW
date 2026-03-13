@@ -120,10 +120,18 @@ export default function LoginPage() {
       return;
     }
 
+    // Since the backend is hosted on Hugging Face free tier, it sleeps after inactivity.
+    // If login takes longer than 3.5 seconds, notify the user.
+    const hfWakeupTimer = setTimeout(() => {
+      showSnackbar('Waking up the backend servers... This usually takes ~1 minute. Please wait!', 'info');
+    }, 3500);
+
     try {
       await login(form.username.trim(), form.password);
+      clearTimeout(hfWakeupTimer);
       // Success message is handled in the useEffect above
     } catch (err) {
+      clearTimeout(hfWakeupTimer);
       console.error("Login Error:", err);
       const errorMessage = err.response?.data?.detail || err.message || 'Invalid username or password.';
       showSnackbar(errorMessage, 'error');
@@ -168,6 +176,8 @@ export default function LoginPage() {
         }
       }}
     >
+
+
       <Fade in timeout={800}>
         <Card
           elevation={0}
@@ -186,20 +196,23 @@ export default function LoginPage() {
         >
           <CardContent sx={{ p: { xs: 4, sm: 6 } }}>
             {/* Header - Logo Only */}
-            <Box sx={{ textAlign: 'center', mb: 6 }}>
+            <Box sx={{ textAlign: 'center', mb: 5 }}>
               <Box
                 component="img"
-                src="/logo.jpg"
-                alt="CitNow Logo"
+                src="/citnow-logo.png"
+                alt="CitNow Analytics Logo"
                 sx={{
                   width: 'auto',
-                  height: 180,
-                  maxWidth: '100%',
+                  height: 'auto',
+                  maxHeight: 110,
+                  maxWidth: '85%',
                   objectFit: 'contain',
-                  filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.08))',
-                  transition: 'transform 0.3s ease',
+                  filter: 'drop-shadow(0 4px 10px rgba(0,0,0,0.05))',
+                  transition: 'all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275)', // Smooth elastic bounce
+                  cursor: 'pointer',
                   '&:hover': {
-                    transform: 'scale(1.02)'
+                    transform: 'scale(1.15)', // Much bigger pop-up zoom
+                    filter: 'drop-shadow(0 12px 20px rgba(0,0,0,0.1))'
                   }
                 }}
               />

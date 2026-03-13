@@ -8,12 +8,37 @@ export const AuthContext = createContext(null);
 // Removed local API_BASE definition to use the centralized one from api.js
 
 export default function AuthProvider({ children }) {
-  const [token, setToken] = useState(null);
+  const [token, setToken] = useState(localStorage.getItem('auth_token'));
   const [user, setUser] = useState(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start as true to check persistence
 
   const isAuthenticated = !!token;
   const role = user?.role;
+
+  // Initialize: Check for existing token and fetch user
+  useEffect(() => {
+    const initAuth = async () => {
+      const savedToken = localStorage.getItem('auth_token');
+      if (savedToken) {
+        try {
+          setAuthToken(savedToken);
+          const me = await axios.get(`${API_BASE}/users/me`, {
+            headers: { Authorization: `Bearer ${savedToken}` },
+          });
+          setUser(me.data);
+          setToken(savedToken);
+        } catch (error) {
+          console.error("Session restoration failed:", error);
+          localStorage.removeItem('auth_token');
+          setToken(null);
+          setAuthToken(null);
+        }
+      }
+      setLoading(false);
+    };
+
+    initAuth();
+  }, []);
 
   const login = useCallback(async (username, password) => {
     setLoading(true);
@@ -29,6 +54,7 @@ export default function AuthProvider({ children }) {
       const access = res.data?.access_token;
       if (!access) throw new Error('Invalid token response');
 
+      localStorage.setItem('auth_token', access);
       setToken(access);
       setAuthToken(access);
 
@@ -44,6 +70,7 @@ export default function AuthProvider({ children }) {
   }, []);
 
   const logout = useCallback(() => {
+    localStorage.removeItem('auth_token');
     setToken(null);
     setUser(null);
     setAuthToken(null);
@@ -51,7 +78,6 @@ export default function AuthProvider({ children }) {
 
   // UPDATED: Use the imported function instead of direct axios call
   const updateProfile = useCallback(async (profileData) => {
-    setLoading(true);
     try {
       const updatedUser = await updateUserProfile(profileData);
 
@@ -66,13 +92,14 @@ export default function AuthProvider({ children }) {
         error.response?.data?.message ||
         'Failed to update profile';
       throw new Error(errorMessage);
-    } finally {
-      setLoading(false);
     }
-  }, []); // No token dependency needed since it's handled in api.js
+  }, []); 
+
   useEffect(() => {
     // Whenever token changes, update global axios header
-    setAuthToken(token);
+    if (token) {
+      setAuthToken(token);
+    }
   }, [token]);
 
   const value = useMemo(
@@ -89,6 +116,11 @@ export default function AuthProvider({ children }) {
     }),
     [token, user, role, isAuthenticated, loading, login, logout, updateProfile]
   );
+
+  // Don't render children until we've finished checking for an existing session
+  if (loading && !user && token) {
+    return null; // Or a loading spinner
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }

@@ -802,16 +802,20 @@ export default function DealerManagement() {
 
     try {
       const res = await api.get(`/results?dealer_id=${encodeURIComponent(did)}`);
-      const results = res.data || [];
+      const resData = res.data;
+      // Normalize: API may return array or { results: [...] }
+      const results = Array.isArray(resData) ? resData : (resData?.results || []);
+      console.log('DealerManagement results for', did, ':', results.length);
       setDealerResults(results);
 
       const qualityDistribution = generateQualityDistribution(results);
       const scoreTrend = generateScoreTrend(results);
       const serviceAdvisorRankings = generateServiceAdvisorRankings(results);
 
-      const avgVideo = results.reduce((sum, r) => sum + (r.video_analysis?.quality_score || 0), 0) / (results.length || 1);
-      const avgAudio = results.reduce((sum, r) => sum + (r.audio_analysis?.score || 0), 0) / (results.length || 1);
-      const avgOverall = results.reduce((sum, r) => sum + (r.overall_quality?.overall_score || 0), 0) / (results.length || 1);
+      // Use multiple fallback paths for score fields
+      const avgVideo = results.reduce((sum, r) => sum + (r.video_analysis?.quality_score || r.video_quality_score || 0), 0) / (results.length || 1);
+      const avgAudio = results.reduce((sum, r) => sum + (r.audio_analysis?.score || r.audio_quality_score || 0), 0) / (results.length || 1);
+      const avgOverall = results.reduce((sum, r) => sum + (r.overall_quality?.overall_score || r.overall_quality_score || 0), 0) / (results.length || 1);
 
       setDashboardData({
         qualityDistribution, scoreTrend, serviceAdvisorRankings,

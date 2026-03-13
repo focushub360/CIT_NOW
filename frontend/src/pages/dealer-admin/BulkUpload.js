@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
-  Box, Paper, Typography, Button, LinearProgress,
+  Box, Paper, Typography, Button, LinearProgress, CircularProgress,
   Card, CardContent, Alert, Chip, Grid, Table,
   TableBody, TableCell, TableContainer, TableHead, TableRow,
   Dialog, DialogTitle, DialogContent, DialogActions,
@@ -979,21 +979,70 @@ export default function BulkUpload() {
                   </Grid>
                 </Grid>
 
-                {/* Progress Bar */}
-                <Box sx={{ mb: 3 }}>
-                  <LinearProgress 
-                    variant="determinate" 
-                    value={status.progress_percentage} 
-                    sx={{ 
-                      height: 8, 
-                      borderRadius: 4,
-                      backgroundColor: MODERN_BMW_THEME.borderLight,
-                      '& .MuiLinearProgress-bar': {
-                        backgroundColor: MODERN_BMW_THEME.primary,
-                        borderRadius: 4
-                      }
-                    }} 
-                  />
+                {/* Circular Progress (Modern Styled like NewAnalysis) */}
+                <Box sx={{ 
+                  display: 'flex', 
+                  flexDirection: 'column', 
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  py: 4, 
+                  mb: 3,
+                  background: '#0a0a0a',
+                  borderRadius: 4,
+                  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                  border: '1px solid #222'
+                }}>
+                  <Box sx={{ position: 'relative', display: 'inline-flex', mb: 2 }}>
+                    {/* Background Circle */}
+                    <CircularProgress
+                      variant="determinate"
+                      value={100}
+                      size={120}
+                      thickness={4}
+                      sx={{ color: '#222' }}
+                    />
+                    {/* Progress Circle (Lime Green) */}
+                    <CircularProgress
+                      variant="determinate"
+                      value={status.progress_percentage || 0}
+                      size={120}
+                      thickness={5}
+                      sx={{
+                        color: status.status === 'failed' ? MODERN_BMW_THEME.error : '#A3E635',
+                        position: 'absolute',
+                        left: 0,
+                        '& .MuiCircularProgress-circle': {
+                          strokeLinecap: 'round',
+                          transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)',
+                        },
+                      }}
+                    />
+                    <Box
+                      sx={{
+                        top: 0,
+                        left: 0,
+                        bottom: 0,
+                        right: 0,
+                        position: 'absolute',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Typography variant="h4" component="div" fontWeight="800" sx={{ color: '#FFFFFF' }}>
+                        {status.progress_percentage || 0}<Box component="span" sx={{ fontSize: '1rem', ml: 0.5 }}>%</Box>
+                      </Typography>
+                    </Box>
+                  </Box>
+                  <Typography variant="caption" sx={{ 
+                    color: status.status === 'failed' ? MODERN_BMW_THEME.error : '#A3E635', 
+                    fontWeight: 700, 
+                    letterSpacing: '1px', 
+                    textTransform: 'uppercase' 
+                  }}>
+                    {status.status === 'completed' ? 'BATCH COMPLETE' : status.status?.toUpperCase()}
+                  </Typography>
                 </Box>
 
                 {/* Current URL */}

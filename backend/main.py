@@ -23,7 +23,7 @@ import pandas as pd
 from bson import ObjectId
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Request, Form, Depends, status
+from fastapi import FastAPI, HTTPException, UploadFile, File, BackgroundTasks, Request, Form, Depends, status, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import ORJSONResponse, JSONResponse, FileResponse, Response
 from pydantic import BaseModel, Field # Added Field for MongoDB _id alias
@@ -155,6 +155,7 @@ class UserInDB(UserBase):
     hashed_password: str
     role: str
     dealer_id: Optional[str] = None
+    created_by_user_id: Optional[str] = None  # who created this user
     created_at: dt
     updated_at: dt
 
@@ -237,6 +238,14 @@ class ProfileUpdate(BaseModel):
     current_password: Optional[str] = None
     new_password: Optional[str] = None
 
+class ThemeSettings(BaseModel):
+    accent_color: str = "#1C69D4"
+    dark_mode: bool = False
+    theme_preset: str = "bmw"
+    dealer_name: str = "BMW Service Center"
+    logo_light_url: Optional[str] = None
+    logo_dark_url: Optional[str] = None
+
 
 
 # -----------------------------
@@ -252,10 +261,12 @@ results_collection = None
 batch_collection = None
 excel_data_collection = None
 users_collection = None
+analysis_tasks_collection = None
+dealer_settings_collection = None
 
 async def connect_to_mongo():
     """Establishes MongoDB connection and assigns collections to global variables."""
-    global client, db, results_collection, batch_collection, excel_data_collection, users_collection, analysis_tasks_collection  # ADD analysis_tasks_collection
+    global client, db, results_collection, batch_collection, excel_data_collection, users_collection, analysis_tasks_collection, dealer_settings_collection
     try:
         client = AsyncIOMotorClient(MONGODB_URI)
         db = client[MONGODB_DB_NAME]
@@ -263,8 +274,8 @@ async def connect_to_mongo():
         batch_collection = db["batch_jobs"]
         excel_data_collection = db["excel_upload_data"]
         users_collection = db["users"]
-        analysis_tasks_collection = db["analysis_tasks"]  # ADD THIS LINE
-        # REMOVED: dealers_collection
+        analysis_tasks_collection = db["analysis_tasks"]
+        dealer_settings_collection = db["dealer_settings"]
         logger.info("MongoDB connection established.")
     except Exception as e:
         logger.error(f"Failed to connect to MongoDB: {e}")
@@ -311,6 +322,9 @@ async def create_mongo_indexes():
         await analysis_tasks_collection.create_index([("status", 1)])
         await analysis_tasks_collection.create_index([("created_at", -1)])
         await analysis_tasks_collection.create_index([("expires_at", 1)], expireAfterSeconds=0)
+        
+        # NEW: Indexes for dealer_settings collection
+        await dealer_settings_collection.create_index([("dealer_id", 1)], unique=True)
         
         logger.info("MongoDB indexes created/ensured.")
     except Exception as e:
@@ -869,6 +883,54 @@ async def update_user_profile(
     return UserInDB(**updated_user_doc)
 
 
+# -----------------------------
+# Dealer Settings & Branding
+# -----------------------------
+@app.get("/dealer/settings")
+async def get_dealer_settings(current_user: UserInDB = Depends(get_current_user)):
+    """Fetch branding and theme settings for the current dealer"""
+    if not current_user.dealer_id:
+        return {
+            "accent_color": "#1C69D4",
+            "dark_mode": False,
+            "theme_preset": "bmw",
+            "dealer_name": current_user.showroom_name or "My Dealership"
+        }
+    
+    settings = await dealer_settings_collection.find_one({"dealer_id": current_user.dealer_id})
+    if not settings:
+        return {
+            "accent_color": "#1C69D4",
+            "dark_mode": False,
+            "theme_preset": "bmw",
+            "dealer_name": current_user.showroom_name or "BMW Service Center"
+        }
+    
+    settings.pop("_id", None)
+    return settings
+
+@app.put("/dealer/settings")
+async def update_dealer_settings(settings: ThemeSettings, current_user: UserInDB = Depends(get_current_user)):
+    """Update branding and theme settings (Admins only)"""
+    if current_user.role not in ["super_admin", "dealer_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can update theme settings")
+    
+    if not current_user.dealer_id:
+        raise HTTPException(status_code=400, detail="User has no assigned dealer_id")
+    
+    settings_dict = settings.dict()
+    settings_dict["dealer_id"] = current_user.dealer_id
+    settings_dict["updated_at"] = dt.utcnow()
+    
+    await dealer_settings_collection.update_one(
+        {"dealer_id": current_user.dealer_id},
+        {"$set": settings_dict},
+        upsert=True
+    )
+    
+    return {"success": True, "message": "Theme settings updated successfully"}
+
+
 # ===============================
 # User Management Endpoints (RBAC Enhanced)
 # ===============================
@@ -983,6 +1045,7 @@ async def create_user(user: UserCreate, current_user: UserInDB = Depends(get_cur
         "branch_name": allowed_branch_name,
         "job_title": user.job_title,
         "phone_number": user.phone_number,
+        "created_by_user_id": str(current_user.id),  # track who created this user
         "created_at": dt.utcnow(),
         "updated_at": dt.utcnow()
     }
@@ -2063,6 +2126,7 @@ async def get_all_results(
     limit: Optional[int] = None,
     batch_id: Optional[str] = None,
     dealer_id: Optional[str] = None,
+    timeRange: Optional[str] = Query(None),
     current_user: UserInDB = Depends(get_current_user)
 ):
     # Support 'limit' as alias for 'per_page' (frontend compatibility)
@@ -2079,21 +2143,33 @@ async def get_all_results(
             raise HTTPException(status_code=400, detail="Invalid batch ID format.")
         query["batch_id"] = batch_id
 
+    if timeRange and timeRange.lower() != "all":
+        now = dt.utcnow()
+        if timeRange.lower() == "day":
+            start_date = now - timedelta(days=1)
+        elif timeRange.lower() == "week":
+            start_date = now - timedelta(weeks=1)
+        elif timeRange.lower() == "month":
+            start_date = now - timedelta(days=30)
+        elif timeRange.lower() == "quarter":
+            start_date = now - timedelta(days=90)
+        elif timeRange.lower() == "year":
+            start_date = now - timedelta(days=365)
+        else:
+            start_date = None
+        if start_date:
+            query["created_at"] = {"$gte": start_date}
+
     # RBAC scoping
     if current_user.role == "super_admin":
         if dealer_id:
             query["dealer_id"] = dealer_id
-    elif current_user.role in ("dealer_admin", "branch_admin"):
-        # Admins see ALL results in their dealership
+    elif current_user.role in ("dealer_admin", "branch_admin", "dealer_user"):
+        # All roles see ONLY their own results (hierarchy: each user owns their uploads)
         if not current_user.dealer_id:
             raise HTTPException(status_code=403, detail="User has no assigned dealer_id.")
         query["dealer_id"] = current_user.dealer_id
-    elif current_user.role == "dealer_user":
-        # Regular users see ONLY their own results
-        if not current_user.dealer_id:
-            raise HTTPException(status_code=403, detail="User has no assigned dealer_id.")
-        query["dealer_id"] = current_user.dealer_id
-        query["submitted_by_user_id"] = str(current_user.id)
+        query["submitted_by_user_id"] = str(current_user.id)  # Only own results
     else:
         raise HTTPException(status_code=403, detail="Not authorized to view results")
 
@@ -2149,13 +2225,33 @@ async def delete_result(result_id: str, current_user: UserInDB = Depends(get_cur
 # -----------------------------
 
 @app.get("/dashboard/super-admin/overview", response_model=SuperAdminDashboardOverview)
-async def get_super_admin_dashboard_overview(current_user: UserInDB = Depends(get_current_super_admin)):
+async def get_super_admin_dashboard_overview(
+    timeRange: Optional[str] = Query(None),
+    current_user: UserInDB = Depends(get_current_super_admin)
+):
     """
     Retrieves aggregated data for the Super Admin dashboard.
     Includes ALL results (completed or without status field for backward compatibility).
     """
     # Match all records in system
     status_match = {}
+
+    if timeRange and timeRange.lower() != "all":
+        now = dt.utcnow()
+        if timeRange.lower() == "day":
+            start_date = now - timedelta(days=1)
+        elif timeRange.lower() == "week":
+            start_date = now - timedelta(weeks=1)
+        elif timeRange.lower() == "month":
+            start_date = now - timedelta(days=30)
+        elif timeRange.lower() == "quarter":
+            start_date = now - timedelta(days=90)
+        elif timeRange.lower() == "year":
+            start_date = now - timedelta(days=365)
+        else:
+            start_date = None
+        if start_date:
+            status_match["created_at"] = {"$gte": start_date}
 
     total_videos = await results_collection.count_documents(status_match)
     
@@ -2186,7 +2282,7 @@ async def get_super_admin_dashboard_overview(current_user: UserInDB = Depends(ge
             "avg_overall_quality": {"$round": ["$avg_overall_quality", 1]}
         }}
     ]).to_list(None)
-    dealers_summary = [DealerSummary(**d) for d in dealers_summary_raw]
+    dealers_summary = [DealerSummary(**{**d, "avg_overall_quality": d.get("avg_overall_quality") or 0.0}) for d in dealers_summary_raw]
 
     return SuperAdminDashboardOverview(
         total_videos_analyzed=total_videos,
@@ -2196,6 +2292,20 @@ async def get_super_admin_dashboard_overview(current_user: UserInDB = Depends(ge
         last_updated=dt.utcnow()
     )
 
+
+@app.get("/debug-scan-dbs")
+async def scan_all_dbs():
+    db_names = await client.list_database_names()
+    results = {}
+    for db_name in db_names:
+        try:
+            db = client[db_name]
+            count = await db.analysis_results.count_documents({})
+            count_users = await db.users.count_documents({})
+            results[db_name] = {"analysis_results": count, "users": count_users}
+        except Exception:
+            pass
+    return results
 
 @app.get("/dashboard/dealer/overview", response_model=DealerAdminDashboardOverview)
 async def get_dealer_dashboard_overview(current_user: UserInDB = Depends(get_current_user)):
