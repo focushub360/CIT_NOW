@@ -501,8 +501,6 @@ async def lifespan(app: FastAPI):
     # 3. Initialize UnifiedMediaAnalyzer instance (Lazy loading models to prevent startup lag)
     logger.info("Initializing UnifiedMediaAnalyzer instance...")
     analyzer = UnifiedMediaAnalyzer()
-    logger.info(f"✅ VERIFIED: Video Quality Engine (Resolution-Floor v2) is ACTIVE.")
-    logger.info(f"📊 Active Floors: {[(r[2], r[3]) for r in analyzer.RESOLUTION_MAP]}")
     # OPTIMIZATION: Models will load lazily only when needed
     # try:
     #     analyzer.load_pretrained_models()
@@ -1269,13 +1267,19 @@ async def process_single_analysis_task(
         })
         
         # Run the actual analysis
-        processed_results = await _run_analysis_pipeline(
+        processed_results, error = await _run_analysis_pipeline(
             citnow_url,
             transcription_language,
             target_language,
             submitted_by_user_id,
             dealer_id
         )
+
+        if error:
+            raise Exception(error)
+        
+        if not processed_results:
+            raise Exception("Analysis returned empty results without an error message.")
         
         # Store results
         res = await results_collection.insert_one(processed_results.copy())
@@ -1467,13 +1471,21 @@ async def _process_single_batch_url_item(
         return False
 
     try:
-        processed_results = await _run_analysis_pipeline(
+        processed_results, error = await _run_analysis_pipeline(
             url,
             transcription_language,
             target_language,
             submitted_by_user_id,
             dealer_id
         )
+
+        if error:
+            logger.error(f"Error in batch item {order}: {error}")
+            return False
+
+        if not processed_results:
+            logger.error(f"Empty results for batch item {order}")
+            return False
         
         await results_collection.insert_one(processed_results)
 

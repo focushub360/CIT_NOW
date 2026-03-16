@@ -50,13 +50,13 @@ sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding="utf-8")
 
 class UnifiedMediaAnalyzer:
     RESOLUTION_MAP = [
-        (3840, 2160, "4K UHD", 9.5, 10.0),
-        (2560, 1440, "1440p (QHD)", 9.2, 9.8),
-        (1920, 1080, "1080p (FHD)", 9.0, 9.6),
-        (1280, 720, "720p (HD)", 8.2, 9.2),
-        (854, 480, "480p (SD)", 7.0, 8.5),
-        (640, 360, "360p (LD)", 6.0, 7.5),
-        (0, 0, "Standard Definition", 5.5, 6.5),
+        (3840, 2160, "4K UHD", 9.0, 10.0),
+        (2560, 1440, "1440p (QHD)", 8.5, 9.5),
+        (1920, 1080, "1080p (FHD)", 7.5, 9.2), # Increased from 7.0 max
+        (1280, 720, "720p (HD)", 6.0, 8.0),   # Increased from 5.5 max
+        (854, 480, "480p (SD)", 4.0, 6.0),
+        (640, 360, "360p (LD)", 2.0, 4.0),
+        (0, 0, "Unknown/Very Low Res", 0, 2.0),
     ]
     SHAKE_TOLERANCE_PX = 1.5
     NOISE_THRESHOLD_STD = 8
@@ -114,13 +114,11 @@ class UnifiedMediaAnalyzer:
         print("=" * 80 + "\n")
 
     def _get_resolution_info(self, width, height):
-        if width == 0 or height == 0:
-            return "Standard Quality", 5.0, 6.5
-            
         sorted_map = sorted(self.RESOLUTION_MAP, key=lambda x: x[0] * x[1], reverse=True)
         for res_w, res_h, label, min_score, max_score in sorted_map:
-            # Check either dimension (handles portrait/landscape)
-            if (width >= res_w and height >= res_h) or (height >= res_w and width >= res_h) or (width >= 0.9*res_w and height >= 0.9*res_h):
+            if res_w == 0 and res_h == 0:
+                continue
+            if (width >= res_w and height >= res_h) or (height >= res_w and width >= res_h):
                 return label, min_score, max_score
         return sorted_map[-1][2], sorted_map[-1][3], sorted_map[-1][4]
 
@@ -308,60 +306,41 @@ class UnifiedMediaAnalyzer:
 
     def _extract_video_url_from_page(self, soup, page_text):
         try:
-            # NEW: Collect ALL potential MP4s and pick the absolute best one
-            all_candidates = []
-            
             video_elem = soup.find("video", {"src": True})
             if video_elem:
-                all_candidates.append(video_elem["src"])
+                return self._clean_url(video_elem["src"])
             video_elem = soup.find("video")
             if video_elem:
                 source = video_elem.find("source", {"src": True})
                 if source:
-                    all_candidates.append(source["src"])
+                    return self._clean_url(source["src"])
             iframe = soup.find("iframe", {"src": True})
             if iframe and "video" in iframe["src"]:
-                all_candidates.append(iframe["src"])
+                return self._clean_url(iframe["src"])
             
-            # Gather all MP4s and pick the one with highest quality signatures
             mp4_pattern = r'(https?://[^\s"]+\.mp4)'
             mp4_matches = re.findall(mp4_pattern, page_text)
+            if mp4_matches:
+                return self._clean_url(mp4_matches[0])
             
-            # Also check script tags explicitly for json/variables
             scripts = soup.find_all("script")
             for script in scripts:
                 if script.string:
-                    # Look for anything ending in .mp4 or common video variable names
-                    script_matches = re.findall(r'https?://[^\s"\']+\.mp4', script.string)
-                    mp4_matches.extend(script_matches)
-                    
-                    # Also look for relative paths in common CitNow patterns
-                    rel_matches = re.findall(r'["\'](/vid/[^"\']+)["\']', script.string)
-                    for rm in rel_matches:
-                        mp4_matches.append("https://southasia.citnow.com" + rm)
-
-            def get_quality_rank(url):
-                url = url.lower()
-                if "output-3000k" in url: return 10
-                if "output-2500k" in url or "2500k" in url: return 9
-                if "output-2000k" in url: return 8
-                if "output-1500k" in url: return 7
-                if "output-1200k" in url: return 6
-                if "output.mp4" in url and "preview" not in url: return 5
-                if "output-360k" in url or "low" in url: return 1
-                return 4
-
-            if mp4_matches:
-                all_candidates.extend(mp4_matches)
-
-            if all_candidates:
-                # Deduplicate and sort by quality
-                matches = list(set([self._clean_url(c) for c in all_candidates]))
-                matches = [m for m in matches if m] # Remove None
-                matches.sort(key=get_quality_rank, reverse=True)
-                print(f"💎 Best video candidate found: {matches[0]}")
-                return matches[0]
-            
+                    video_patterns = [
+                        r'videoUrl["\']?\s*[:=]\s*["\']([^"\']+)["\']',
+                        r'src["\']?\s*[:=]\s*["\']([^"\']+\.mp4)["\']',
+                        r'file["\']?\s*[:=]\s*["\']([^"\']+\.mp4)["\']',
+                        r'"url"\s*:\s*"([^"]+\.mp4)"',
+                        r'"video"\s*:\s*"([^"]+\.mp4)"',
+                    ]
+                    for pattern in video_patterns:
+                        match = re.search(pattern, script.string)
+                        if match:
+                            video_url = match.group(1)
+                            video_url = self._clean_url(video_url)
+                            if not video_url.startswith("http"):
+                                video_url = "https://southasia.citnow.com/" + video_url.lstrip("/")
+                            return video_url
             return None
         except Exception as e:
             print(f"⚠️ Error extracting video URL: {e}")
@@ -390,35 +369,12 @@ class UnifiedMediaAnalyzer:
         if not video_url:
             print("❌ No video URL found in metadata, falling back to direct pattern...")
             # Fallback: extract video ID from URL
-            # Fallback: extract video ID from URL
             if '/vid/' in url:
                 video_id = url.split('/vid/')[-1].split('?')[0]
             else:
                 video_id = url.split('/')[-1].split('?')[0]
-
-            # Fallback for Sanghi Classic (trying higher quality versions first)
-            dealer_path = "cin-southasia-sanghi-classic-service"
-            if 'sanghi' not in url.lower():
-                dealer_path = "service"
-                
-            candidates = [
-                f"https://lts.in.prod.citnow.com/{dealer_path}/{video_id}/output-3000k.mp4",
-                f"https://lts.in.prod.citnow.com/{dealer_path}/{video_id}/output-2500k.mp4",
-                f"https://lts.in.prod.citnow.com/{dealer_path}/{video_id}/output-1500k.mp4",
-                f"https://lts.in.prod.citnow.com/{dealer_path}/{video_id}/output-1200k.mp4",
-                f"https://lts.in.prod.citnow.com/{dealer_path}/{video_id}/output.mp4"
-            ]
             
-            for cand in candidates:
-                try:
-                    head = requests.head(cand, timeout=5)
-                    if head.status_code == 200:
-                        video_url = cand
-                        break
-                except: continue
-            
-            if not video_url:
-                video_url = candidates[1] # Last fallback to 1200k
+            video_url = f"https://lts.in.prod.citnow.com/cin-southasia-sanghi-classic-service/{video_id}/output-1200k.mp4"
 
         print(f"🎯 Using video URL: {video_url}")
 
@@ -829,24 +785,6 @@ class UnifiedMediaAnalyzer:
             width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
             
-            # FALLBACK: Use ffprobe if OpenCV fails to get dimensions
-            if width <= 0 or height <= 0:
-                print("⚠️ OpenCV failed to get dimensions, trying ffprobe fallback...")
-                try:
-                    cmd = [
-                        "ffprobe", "-v", "error", "-select_streams", "v:0",
-                        "-show_entries", "stream=width,height",
-                        "-of", "csv=s=x:p=0", video_path
-                    ]
-                    res = subprocess.run(cmd, capture_output=True, text=True, check=True)
-                    dim_str = res.stdout.strip()
-                    if 'x' in dim_str:
-                        width = int(dim_str.split('x')[0])
-                        height = int(dim_str.split('x')[1])
-                        print(f"✅ FFprobe found resolution: {width}x{height}")
-                except Exception as fe:
-                    print(f"❌ FFprobe resolution fallback failed: {fe}")
-            
             fps = cap.get(cv2.CAP_PROP_FPS)
             frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
             
@@ -894,33 +832,18 @@ class UnifiedMediaAnalyzer:
             shake_score, shake_details = self._calculate_detailed_shake(video_path, sample_idxs)
             noise_score, noise_details = self._calculate_detailed_noise(video_path, sample_idxs)
             
-            # Robust Frame Sampling: Sequential read (avoids codec seek bugs in MP4/HEVC)
+            # Frame-by-frame comprehensive analysis
             prev_frame_gray = None
             frozen_frames = 0
             grabbed_frames = 0
             motion_changes = []
             
-            skip_interval = max(1, frame_count // (num_frames_to_sample + 2))
-            current_video_idx = 0
-            processed_count = 0
-            
-            while processed_count < num_frames_to_sample and current_video_idx < frame_count:
+            for idx in sample_idxs:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
                 ret, frame = cap.read()
-                if not ret: break
-                
-                # Increment frame counter immediately after read
-                current_video_idx += 1
-
-                # Check if we should process THIS frame
-                if (current_video_idx - 1) % skip_interval != 0:
+                if not ret:
                     continue
-
-                # Double check for empty/corrupt frames (common on Windows with 4K)
-                if frame is None or np.sum(frame) == 0:
-                    continue
-
-                processed_count += 1
-
+                    
                 grabbed_frames += 1
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 
@@ -948,11 +871,10 @@ class UnifiedMediaAnalyzer:
                     diff = cv2.absdiff(gray, prev_frame_gray)
                     motion_change = np.mean(diff)
                     motion_changes.append(motion_change)
-                    if motion_change < 0.15: # Much less sensitive - only true frozen/black frames
+                    if motion_change < 2.0:
                         frozen_frames += 1
                 
                 prev_frame_gray = gray
-                current_video_idx += 1
             
             cap.release()
             
@@ -990,22 +912,15 @@ class UnifiedMediaAnalyzer:
             blockiness_avg = np.mean(blockiness_clean) if len(blockiness_clean) > 0 else 0
             
             # Enhanced scoring with better normalization (Relaxed for real-world footage)
-            # Sharpness: Laplacian var values are much higher in 4K.
-            # We'll use a dynamic threshold based on resolution.
-            sharp_threshold = 42 if width > 2000 else 32 # Lowered from 45/35
-            sharpness_score = np.clip((sharpness_avg - 1.0) / (sharp_threshold - 1.0) * 100, 0, 100)
-            
-            # Brightness: Even more generous sweet spot
-            brightness_score = np.clip(100 - abs(brightness_avg - 128) / 130 * 100, 0, 100)
-            
-            # Contrast: std dev of 20+ is good for handheld
-            contrast_score = np.clip((contrast_avg - 3) / (32 - 3) * 100, 0, 100)
-            
-            # Color: saturation of 25+ is enough
-            color_score = np.clip((saturation_avg - 6) / (45 - 6) * 100, 0, 100)
-            
-            # Compression: Blockiness threshold (more lenient)
-            compression_score = np.clip(100 - (blockiness_avg * 100), 0, 100)
+            # Sharpness: Laplacian var of 100+ is excellent for compressed video
+            sharpness_score = np.clip((sharpness_avg - 5) / (120 - 5) * 100, 0, 100)
+            # Brightness: More forgiving range (80-180 is generally fine)
+            brightness_score = np.clip(100 - abs(brightness_avg - 127) / 80 * 100, 0, 100)
+            # Contrast: std dev of 40+ is very high contrast
+            contrast_score = np.clip((contrast_avg - 10) / (60 - 10) * 100, 0, 100)
+            # Color: saturation of 60+ is quite vibrant
+            color_score = np.clip((saturation_avg - 20) / (80 - 20) * 100, 0, 100)
+            compression_score = np.clip(100 - (blockiness_avg * 150), 0, 100)
             
             # Motion consistency score
             if motion_changes:
@@ -1014,25 +929,14 @@ class UnifiedMediaAnalyzer:
             else:
                 motion_score = 50
             
-            # Calculate visual_score_o10 (weighted sum out of 10)
-            visual_score_o10 = (
-                sharpness_score * 0.35 +
-                brightness_score * 0.15 +
-                contrast_score * 0.15 +
-                noise_score * 0.10 +
-                shake_score * 0.10 +
-                color_score * 0.05 +
-                compression_score * 0.05 +
-                motion_score * 0.05
-            ) / 10
-            
-            # --- RESOLUTION-FLOOR SCORING ---
-            # Instead of a weighted average that drags scores down, 
-            # we use the resolution tier as a GUARANTEED MINIMUM.
-            # visual_norm (0.0 to 1.0) scales the score within the resolution's range.
-            visual_norm = visual_score_o10 / 10
-            resolution_base = min_res_score + (max_res_score - min_res_score) * visual_norm
-            final_score = resolution_base
+            # Frozen frames penalty
+            frozen_ratio = frozen_frames / grabbed_frames
+            if frozen_ratio > 0.4:
+                frozen_penalty = 30
+            elif frozen_ratio > 0.2:
+                frozen_penalty = 15
+            else:
+                frozen_penalty = 0
             
             # Enhanced component scoring
             component_scores = {
@@ -1064,9 +968,9 @@ class UnifiedMediaAnalyzer:
             if color_score < 20:
                 issues.append("Dull colors - poor saturation")
 
-            if shake_score < 25:
+            if shake_score < 40:
                 issues.append("Severe camera shake - very unstable")
-            elif shake_score < 45:
+            elif shake_score < 60:
                 issues.append("Noticeable camera shake")
 
             if noise_score < 40:
@@ -1081,8 +985,9 @@ class UnifiedMediaAnalyzer:
                 issues.append("Some frozen frames")
             
             # Calculate overall score with proper scale (Out of 10)
-            # Resolution base: mid-point by default, but scales to max if visuals are great
-            # Calculate visual_score_o10 (weighted sum out of 10)
+            resolution_base = (min_res_score + max_res_score) / 2
+            
+            # visual_score is 0-100, convert it to 0-10 internally for weighted sum
             visual_score_o10 = (
                 sharpness_score * 0.35 +
                 brightness_score * 0.15 +
@@ -1094,67 +999,43 @@ class UnifiedMediaAnalyzer:
                 motion_score * 0.05
             ) / 10
             
-            # Penalty for frozen frames comes AFTER the floor calculation
-            if grabbed_frames > 0:
-                frozen_ratio = frozen_frames / grabbed_frames
-            else:
-                frozen_ratio = 0
-                
-            if frozen_ratio > 0.4:
-                final_score = max(1.0, final_score - 1.0) # Reduced penalty
-            elif frozen_ratio > 0.2:
-                final_score = max(1.0, final_score - 0.5) # Reduced penalty
+            # Final score is a weighted average of Resolution and Visual Quality
+            final_score = (resolution_base * 0.3) + (visual_score_o10 * 0.7)
+            final_score = np.clip(final_score - (frozen_penalty / 20), 0, 10) 
             
-            # Bonus for high-res very clear videos
-            if res_label in ["4K UHD", "1440p (QHD)", "1080p (FHD)"] and visual_score_o10 > 9.0:
+            # Bonus for high-res clear videos
+            if res_label in ["4K UHD", "1440p (QHD)", "1080p (FHD)"] and visual_score_o10 > 8.5:
                 final_score = min(10.0, final_score + 0.5)
             
-            # Enhanced shake level classification
-            if shake_score >= 80:
+            # Enhanced shake level classification (internal scores still 0-100)
+            if shake_score >= 85:
                 shake_level = "Very Stable"
-            elif shake_score >= 60:
+            elif shake_score >= 70:
                 shake_level = "Stable"
-            elif shake_score >= 45:
+            elif shake_score >= 55:
                 shake_level = "Slightly Shaky"
-            elif shake_score >= 30:
+            elif shake_score >= 40:
                 shake_level = "Shaky"
-            elif shake_score >= 15:
+            elif shake_score >= 25:
                 shake_level = "Very Shaky"
             else:
                 shake_level = "Extremely Shaky"
             
-            quality_label = self._get_quality_label(final_score)
-            
+            # Enhanced detailed analysis
             detailed_analysis = {
-                "resolution": f"{width}x{height} ({res_label})", 
-                "duration": f"{duration:.1f}s",
-                "frame_rate": f"{fps:.1f} fps", 
-                "sharpness": f"{sharpness_score:.1f}%",
-                "brightness": f"{brightness_score:.1f}%", 
-                "contrast": f"{contrast_score:.1f}%",
-                "color_vibrancy": f"{color_score:.1f}%", 
-                "stability": f"{shake_score:.1f}%",
-                "cleanliness": f"{noise_score:.1f}%", 
-                "compression": f"{compression_score:.1f}%",
-                "motion_consistency": f"{motion_score:.1f}%", 
-                "frozen_frames": f"{frozen_ratio*100:.1f}%"
+                "resolution": f"{width}x{height} ({res_label})", "duration": f"{duration:.1f}s",
+                "frame_rate": f"{fps:.1f} fps", "sharpness": f"{sharpness_score:.1f}%",
+                "brightness": f"{brightness_score:.1f}%", "contrast": f"{contrast_score:.1f}%",
+                "color_vibrancy": f"{color_score:.1f}%", "stability": f"{shake_score:.1f}%",
+                "cleanliness": f"{noise_score:.1f}%", "compression": f"{compression_score:.1f}%",
+                "motion_consistency": f"{motion_score:.1f}%", "frozen_frames": f"{frozen_ratio*100:.1f}%"
             }
             
             return {
                 "quality_score": round(float(final_score), 1),
-                "quality_label": quality_label,
-                "issues": issues, 
-                "shake_level": shake_level,
-                "resolution_quality": res_label, 
-                "diagnostic_info": {
-                    "detected_width": width,
-                    "detected_height": height,
-                    "sharpness_avg": round(float(sharpness_avg), 2),
-                    "brightness_avg": round(float(brightness_avg), 1),
-                    "grabbed_frames": grabbed_frames,
-                    "res_base_score": round(float(resolution_base), 2)
-                },
-                "detailed_analysis": detailed_analysis,
+                "quality_label": self._get_quality_label(final_score),
+                "issues": issues, "shake_level": shake_level,
+                "resolution_quality": res_label, "detailed_analysis": detailed_analysis,
                 "component_scores": component_scores
             }
             
@@ -1203,23 +1084,12 @@ class UnifiedMediaAnalyzer:
             displacements = []
             prev_gray = None
             
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            if frame_count <= 0:
-                frame_count = max(sample_idxs) + 1 if len(sample_idxs) > 0 else 100
-                
-            skip_interval = max(1, frame_count // (len(sample_idxs) + 2))
-            current_video_idx = 0
-            processed_count = 0
-            
-            while processed_count < len(sample_idxs) and current_video_idx < frame_count:
+            for idx in sample_idxs:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
                 ret, frame = cap.read()
-                if not ret: break
-                
-                if current_video_idx % skip_interval != 0:
-                    current_video_idx += 1
+                if not ret:
                     continue
-                
-                processed_count += 1
+                    
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 
                 if prev_gray is not None:
@@ -1237,9 +1107,7 @@ class UnifiedMediaAnalyzer:
                                 frame_pairs += 1
                 
                 prev_gray = gray
-                current_video_idx += 1
             
-            width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) or 1920
             cap.release()
             
             if frame_pairs == 0:
@@ -1248,21 +1116,10 @@ class UnifiedMediaAnalyzer:
             avg_shake_px = total_displacement / frame_pairs
             shake_variance = np.std(displacements) if len(displacements) > 1 else 0
             
-            # DYNAMIC TOLERANCE: For 4K (3840px), we use 0.5% of frame width as base "stable" movement.
-            # Example: 3840px * 0.005 = 19.2px.
-            # Example: 1920px * 0.005 = 9.6px.
-            dynamic_tolerance = max(2.5, width * 0.005)
-            
-            # Super-relaxed shake scoring: Only penalize if movement exceeds 50% of tolerance
-            # We use a gentler curve so handheld stable videos stay above 90.
-            if avg_shake_px < (dynamic_tolerance * 0.5):
-                base_score = 100 - (avg_shake_px / dynamic_tolerance) * 10
-            else:
-                base_score = 95 - (avg_shake_px / dynamic_tolerance) * 20
-            
-            # Minimal penalties for micro-fluctuations
-            variance_penalty = min(shake_variance * 1.2, 8)
-            max_shake_penalty = min(max_displacement * 0.8, 6)
+            # Relaxed shake scoring for handheld devices
+            base_score = 100 - (avg_shake_px / (self.SHAKE_TOLERANCE_PX * 2.5)) * 50
+            variance_penalty = min(shake_variance * 5, 15)
+            max_shake_penalty = min(max_displacement * 3, 10)
             
             shake_score = max(0, base_score - variance_penalty - max_shake_penalty)
             shake_score = np.clip(shake_score, 0, 100)
@@ -1275,7 +1132,7 @@ class UnifiedMediaAnalyzer:
             return 50.0, f"Shake analysis error: {e}"
 
     def _calculate_detailed_noise(self, video_path, sample_idxs):
-        """Enhanced noise detection with sequential reading (bypass Windows seek bugs)"""
+        """Enhanced noise detection with detailed metrics"""
         try:
             cap = cv2.VideoCapture(video_path)
             if not cap.isOpened():
@@ -1284,20 +1141,12 @@ class UnifiedMediaAnalyzer:
             noise_estimates = []
             brightness_variations = []
             
-            frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-            skip_interval = max(1, frame_count // (len(sample_idxs) + 2))
-            current_video_idx = 0
-            processed_count = 0
-            
-            while processed_count < len(sample_idxs) and current_video_idx < frame_count:
+            for idx in sample_idxs:
+                cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
                 ret, frame = cap.read()
-                if not ret: break
-                
-                current_video_idx += 1
-                if (current_video_idx - 1) % skip_interval != 0:
+                if not ret:
                     continue
-                
-                processed_count += 1
+                    
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 
                 # Laplacian-based noise estimation
@@ -1307,24 +1156,20 @@ class UnifiedMediaAnalyzer:
                     if mad > 0:
                         noise_estimates.append(mad)
                 
-                # Brightness variation
+                # Brightness variation (can indicate compression artifacts)
                 brightness_variations.append(np.std(gray))
             
             cap.release()
             
             if not noise_estimates:
-                return 65.0, "Insufficient noise data" # Default to positive if data missing
+                return 50.0, "No noise estimates available"
             
             avg_noise_mad = np.mean(noise_estimates)
             brightness_variation = np.mean(brightness_variations) if brightness_variations else 0
             
             # Combined noise scoring
-            # Use larger threshold for noise (12 vs 8) to avoid penalizing detail
-            base_score = 100 - (avg_noise_mad / (self.NOISE_THRESHOLD_STD * 1.5)) * 50
-            
-            # Brightness variation (std dev) is actually GOOD (it means contrast), 
-            # so we only penalize it if it's extremely LOW (flat image)
-            variation_penalty = 15 if brightness_variation < 5 else 0
+            base_score = 100 - (avg_noise_mad / self.NOISE_THRESHOLD_STD) * 50
+            variation_penalty = min(brightness_variation * 2, 15)
             
             noise_score = max(0, base_score - variation_penalty)
             noise_score = np.clip(noise_score, 0, 100)
@@ -1336,149 +1181,61 @@ class UnifiedMediaAnalyzer:
         except Exception as e:
             return 50.0, f"Noise analysis error: {e}"
         
-    def perform_qa_analysis(self, transcription, video_analysis, audio_analysis, citnow_metadata):
-        """
-        Perform a qualitative QA analysis based on the 'Quick QA Check Sheet' (15 criteria).
-        Scores each item from 1 to 5.
-        """
-        text = transcription.lower()
-        items = {}
-        
-        # Helper to scale 0-100 or 0-10 score to 1-5
-        def scale_to_5(score, max_val=10):
-            scaled = (score / max_val) * 4 + 1
-            return round(np.clip(scaled, 1, 5))
-
-        # 1. Video Quality
-        items['clear_audible_voice'] = scale_to_5(audio_analysis.get('score', 5))
-        items['minimal_background_noise'] = scale_to_5(audio_analysis.get('component_scores', {}).get('noise', 50), 100)
-        
-        # Simple language detection
-        words = text.split()
-        avg_word_len = np.mean([len(w) for w in words]) if words else 5
-        items['simple_language'] = 5 if avg_word_len < 6 else 4 if avg_word_len < 8 else 3
-        
-        # 2. Visuals
-        v_scores = video_analysis.get('component_scores', {})
-        items['lighting_focus_clear'] = scale_to_5((v_scores.get('brightness', 50) + v_scores.get('sharpness', 50)) / 2, 100)
-        items['steady_controlled_camera'] = scale_to_5(v_scores.get('stability', 50), 100)
-        
-        # Multipart used
-        duration = float(video_analysis.get('detailed_analysis', {}).get('duration', '0').replace('s', ''))
-        items['multipart_used'] = 5 if duration > 120 else 4 if duration > 60 else 3
-        
-        # 3. Process
-        # Proper intro detection
-        intro_keywords = ["hello", "welcome", "hi", "this is", "good morning", "good afternoon"]
-        items['proper_intro'] = 5 if any(k in text[:100] for k in intro_keywords) else 2
-        
-        # Explains work + findings
-        findings_keywords = ["found", "checking", "condition", "status", "issue", "report", "health check"]
-        items['explains_work_findings'] = 5 if any(k in text for k in findings_keywords) else 3
-        
-        # Ends with call to action
-        cta_keywords = ["call", "book", "contact", "thanks", "thank you", "let us know", "soon"]
-        items['ends_with_call_to_action'] = 5 if any(k in text[-150:] for k in cta_keywords) else 2
-        
-        # 4. Visual Aids & Upsell
-        # Gauges visible
-        items['gauges_visible'] = 5 if any(k in text for k in ["mm ", "gauge", "depth", "tread", "thickness"]) else 3
-        
-        # % wear / limits mentioned
-        limits_mentioned = re.search(r'\d+(\s?%|\s?mm)', text)
-        items['wear_limits_mentioned'] = 5 if limits_mentioned else 3
-        
-        # Urgency / next steps explained
-        urgency_keywords = ["immediate", "urgent", "recommend", "needed", "required", "soon", "next steps"]
-        items['urgency_next_steps_explained'] = 5 if any(k in text for k in urgency_keywords) else 3
-        
-        # 5. Success Check
-        # Video sent & watched (Assume 5 if we have a URL and metadata)
-        items['video_sent_watched'] = 5 if citnow_metadata else 3
-        
-        # Follow-up / authorisation done
-        items['follow_up_done'] = 4 if any(k in text for k in ["follow up", "authorise", "permission"]) else 3
-        
-        # Customer feedback (Map star rating 1-5 to 1-5 default 3)
-        items['customer_feedback'] = citnow_metadata.get('star_rating', 3) if citnow_metadata else 3
-        
-        # Final Score Calculation
-        total_points = sum(items.values())
-        overall_qa_score = total_points / 15
-        
-        return {
-            "items": items,
-            "total_points": total_points,
-            "overall_qa_score": round(overall_qa_score, 2),
-            "max_possible": 75,
-            "rating_label": "High Quality" if overall_qa_score >= 4.5 else "Good" if overall_qa_score >= 3.5 else "Standard" if overall_qa_score >= 2.5 else "Poor"
-        }
-
-    def _get_quality_label(self, score):
-        """Internal helper for video-only labels"""
-        if score >= 9.2: return "Premium UHD"
-        if score >= 8.2: return "Superior (HQ)"
-        if score >= 7.2: return "High Quality"
-        if score >= 6.2: return "Very Good"
-        if score >= 5.0: return "Quality Video"
-        if score >= 4.0: return "Passable"
-        return "Low Quality"
-
-    def calculate_overall_quality(self, audio_analysis, video_analysis, citnow_metadata=None, transcription=""):
-        """Calculate overall quality blending technical metrics with the new QA Check Sheet rules"""
+    def calculate_overall_quality(self, audio_analysis, video_analysis, citnow_metadata=None):
+        """Calculate overall quality out of 10 with equal importance for audio and video, blending with CitNow rating if available"""
         try:
             audio_score = audio_analysis.get('score', 0)
             video_score = video_analysis.get('quality_score', 0)
             
-            # 1. Technical Score (0-10)
-            overall_technical_score = (audio_score * 0.5) + (video_score * 0.5)
+            # Scores are already 0-10, no conversion needed
+            audio_weight = 0.5
+            video_weight = 0.5
             
-            # 2. QA Analytics Score (1-5 scaled to 0-10)
-            qa_analysis = self.perform_qa_analysis(transcription, video_analysis, audio_analysis, citnow_metadata)
-            qa_score_o10 = qa_analysis['overall_qa_score'] * 2.0
+            overall_technical_score = (audio_score * audio_weight) + (video_score * video_weight)
             
-            # BLEND: 40% technical, 60% QA Rules (The document rules are priority for business)
-            final_overall_score = (qa_score_o10 * 0.6) + (overall_technical_score * 0.4)
+            # BLEND WITH REAL RATING (Star Rating from 1-5 to 0-10)
+            star_rating = None
+            if citnow_metadata:
+                star_rating = citnow_metadata.get('star_rating')
             
-            # Blend with Real Star Rating if available (Trace real)
-            star_rating = citnow_metadata.get('star_rating') if citnow_metadata else None
+            final_overall_score = overall_technical_score
+            has_real_rating = False
+            
             if star_rating is not None:
+                # Map 1-5 stars to 0-10 score (1->2, 5->10)
                 real_score = star_rating * 2.0
-                final_overall_score = (real_score * 0.4) + (final_overall_score * 0.6)
-
-            # Redefined labels for User Satisfaction (Everything 5+ is Good)
-            if final_overall_score >= 9.2:
-                overall_label = "Premium"
-            elif final_overall_score >= 8.2:
-                overall_label = "Superior"
-            elif final_overall_score >= 7.2:
-                overall_label = "High Quality"
-            elif final_overall_score >= 6.2:
+                # Blend: 60% real rating, 40% technical. This makes it "trace real"
+                final_overall_score = (real_score * 0.6) + (overall_technical_score * 0.4)
+                has_real_rating = True
+            
+            # Quality labels for 0–10 range
+            if final_overall_score >= 9:
+                overall_label = "Excellent"
+            elif final_overall_score >= 8:
                 overall_label = "Very Good"
-            elif final_overall_score >= 5.0:
-                overall_label = "Good (Standard)"
-            elif final_overall_score >= 4.0:
+            elif final_overall_score >= 7:
+                overall_label = "Good"
+            elif final_overall_score >= 6:
                 overall_label = "Fair"
+            elif final_overall_score >= 5:
+                overall_label = "Poor"
+            elif final_overall_score >= 3:
+                overall_label = "Very Poor"
             else:
-                overall_label = "Below Average"
+                overall_label = "Unusable"
             
             return {
                 "overall_score": round(final_overall_score, 1),
                 "overall_label": overall_label,
+                "audio_contribution": round(audio_score * audio_weight, 1),
+                "video_contribution": round(video_score * video_weight, 1),
                 "technical_score": round(overall_technical_score, 1),
-                "qa_score": round(qa_analysis['overall_qa_score'], 1),
-                "qa_details": qa_analysis,
+                "real_rating_score": round(star_rating * 2, 1) if star_rating is not None else None,
+                "has_real_rating": has_real_rating,
                 "breakdown": {
                     "audio_quality": round(audio_score, 1),
-                    "video_quality": round(video_score, 1),
-                    "qa_compliance": round(qa_analysis['overall_qa_score'], 1)
+                    "video_quality": round(video_score, 1)
                 }
-            }
-        except Exception as e:
-            return {
-                "overall_score": 0,
-                "overall_label": "Calculation Failed",
-                "error": str(e)
             }
         except Exception as e:
             return {
@@ -1877,13 +1634,14 @@ class UnifiedMediaAnalyzer:
             print("-" * 40)
             video_analysis = self.analyze_video_quality(video_path)
             
-            # TECHNICAL ONLY: Removed Star Rating blending to avoid customer feedback dragging down technical scores
-            # The AI analysis should be purely based on the video content.
-            # star_rating = results.get("citnow_metadata", {}).get("star_rating")
-            # if star_rating is not None:
-            #     real_score = star_rating * 2.0
-            #     video_analysis["quality_score"] = round((real_score * 0.5) + (video_analysis["quality_score"] * 0.5), 1)
-            #     video_analysis["quality_label"] = self._get_quality_label(video_analysis["quality_score"])
+            # Blend Video Quality score with real rating if available
+            star_rating = results.get("citnow_metadata", {}).get("star_rating")
+            if star_rating is not None:
+                real_score = star_rating * 2.0
+                # Blend 50/50 for individual component to keep technical value but align with real rating
+                video_analysis["quality_score"] = round((real_score * 0.5) + (video_analysis["quality_score"] * 0.5), 1)
+                video_analysis["quality_label"] = self._get_quality_label(video_analysis["quality_score"])
+                print(f"⚖️ Adjusted Video Quality with Star Rating ({star_rating}★)")
 
             results["video_analysis"] = video_analysis
             results["processing_steps"].append("video_quality_analysis")
@@ -1900,8 +1658,7 @@ class UnifiedMediaAnalyzer:
             overall_quality = self.calculate_overall_quality(
                 results["audio_analysis"], 
                 results["video_analysis"],
-                citnow_metadata=results.get("citnow_metadata"),
-                transcription=transcription
+                citnow_metadata=results.get("citnow_metadata")
             )
             results["overall_quality"] = overall_quality
             results["processing_steps"].append("overall_quality_assessment")
