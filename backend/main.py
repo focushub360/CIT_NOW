@@ -1719,6 +1719,55 @@ async def get_analysis_status(
         )
     
     return task
+def load_excel_file_robustly(contents: bytes, filename: str) -> pd.DataFrame:
+    """
+    Robustly loads Excel files (.xls, .xlsx) into a pandas DataFrame.
+    Handles xlrd's "Workbook corruption: seen[2] == 4" error by using engine_kwargs.
+    """
+    filename_lower = filename.lower() if filename else ""
+    
+    # 1. Try reading with pandas default engine sniffing
+    try:
+        return pd.read_excel(_io.BytesIO(contents))
+    except Exception as e:
+        err_msg = str(e)
+        logger.warning(f"Default pandas read failed for {filename}: {err_msg}. Retrying with specific settings...")
+        
+        # Check if the error is due to workbook corruption (xlrd)
+        if "Workbook corruption" in err_msg or "seen[2] ==" in err_msg:
+            # 2. Try specifically with engine='xlrd' and ignore_workbook_corruption=True
+            try:
+                logger.info(f"Retrying {filename} with engine='xlrd' and ignore_workbook_corruption=True")
+                return pd.read_excel(
+                    _io.BytesIO(contents),
+                    engine="xlrd",
+                    engine_kwargs={"ignore_workbook_corruption": True}
+                )
+            except Exception as xlrd_err:
+                logger.error(f"Failed reading xls with ignore_workbook_corruption=True: {xlrd_err}")
+                
+        # 3. Try to fall back to swapping engines in case of incorrect extensions
+        if filename_lower.endswith('.xls'):
+            # Sometimes xlsx files are incorrectly renamed to .xls
+            try:
+                logger.info(f"Retrying {filename} as openpyxl (in case it is actually an xlsx format)")
+                return pd.read_excel(_io.BytesIO(contents), engine='openpyxl')
+            except Exception:
+                pass
+        elif filename_lower.endswith('.xlsx'):
+            # Sometimes xls files are incorrectly renamed to .xlsx
+            try:
+                logger.info(f"Retrying {filename} as xlrd with ignore_workbook_corruption=True")
+                return pd.read_excel(
+                    _io.BytesIO(contents),
+                    engine='xlrd',
+                    engine_kwargs={'ignore_workbook_corruption': True}
+                )
+            except Exception:
+                pass
+        
+        # Reraise the original error if we couldn't parse it with any fallback
+        raise e
 
 @app.post("/bulk-analyze", response_model=BatchCreateResponse)
 async def create_bulk_analysis(
@@ -1733,7 +1782,7 @@ async def create_bulk_analysis(
             raise HTTPException(status_code=400, detail="Only Excel files (.xlsx, .xls) are supported.")
 
         contents = await file.read()
-        df = pd.read_excel(_io.BytesIO(contents))
+        df = load_excel_file_robustly(contents, file.filename)
         logger.info("Excel file loaded with %d rows", len(df))
 
         # Normalize column headers and values for robust detection
@@ -2506,7 +2555,9 @@ async def health_check():
 
 @app.get("/")
 async def root():
-    """Root endpoint providing basic API information."""
+    """Root endpoint serving React frontend if built, otherwise basic API information."""
+    if os.path.exists("build/index.html"):
+        return FileResponse("build/index.html")
     return {
         "message": f"{APP_TITLE} v{APP_VERSION}",
         "description": "API for video analysis, transcription, summarization, and translation with RBAC and dashboard capabilities.",
@@ -2541,6 +2592,19 @@ async def root():
             }
         }
     }
+
+# --- Serve React Frontend ---
+if os.path.exists("build"):
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/static", StaticFiles(directory="build/static"), name="static")
+
+    @app.get("/{catchall:path}")
+    async def serve_react_app(catchall: str):
+        file_path = os.path.join("build", catchall)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return FileResponse(file_path)
+        return FileResponse("build/index.html")
+
 
 if __name__ == "__main__":
     import uvicorn
