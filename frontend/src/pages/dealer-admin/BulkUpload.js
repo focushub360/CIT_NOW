@@ -80,6 +80,79 @@ export default function BulkUpload() {
   const [isLoading, setIsLoading] = useState(false);
 
   const [snackbar, setSnackbar] = useState({ open: false, message: '', severity: 'success' });
+  const [liveProgress, setLiveProgress] = useState(0);
+
+  // Dynamic Time Remaining Estimator
+  const formatDuration = (secs) => {
+    if (secs <= 0) return '0s';
+    const h = Math.floor(secs / 3600);
+    const m = Math.floor((secs % 3600) / 60);
+    const s = secs % 60;
+    
+    if (h > 0) return `${h}h ${m}m ${s}s`;
+    if (m > 0) return `${m}m ${s}s`;
+    return `${s}s`;
+  };
+
+  const getExpectedTimeRemaining = () => {
+    if (!status || status.status !== 'processing') return '';
+    
+    const startTime = status.started_at ? new Date(status.started_at).getTime() : null;
+    const now = Date.now();
+    
+    if (!startTime) {
+      const remaining = status.total_urls - status.processed_urls;
+      return formatDuration(remaining * 30);
+    }
+    
+    const elapsedMs = now - startTime;
+    if (status.processed_urls > 0) {
+      const msPerUrl = elapsedMs / status.processed_urls;
+      const remainingUrls = status.total_urls - status.processed_urls;
+      const remainingMs = msPerUrl * remainingUrls;
+      return formatDuration(Math.ceil(remainingMs / 1000));
+    } else {
+      const remaining = status.total_urls;
+      return formatDuration(remaining * 30);
+    }
+  };
+
+  // Interpolation logic to count decimals continuously (e.g. 12.90% live)
+  useEffect(() => {
+    if (!status) {
+      setLiveProgress(0);
+      return;
+    }
+
+    if (status.status !== 'processing') {
+      setLiveProgress(status.progress_percentage || 0);
+      return;
+    }
+
+    setLiveProgress(status.progress_percentage);
+
+    let activeUrl = status.current_url;
+    let itemStartTime = Date.now();
+
+    const interval = setInterval(() => {
+      if (status.current_url !== activeUrl) {
+        activeUrl = status.current_url;
+        itemStartTime = Date.now();
+      }
+
+      const elapsed = Date.now() - itemStartTime;
+      const estimatedDuration = 25000; // 25s per video
+      const itemProgressRatio = Math.min(elapsed / estimatedDuration, 0.95);
+
+      const baseProgress = (status.processed_urls / status.total_urls) * 100;
+      const nextItemWeight = (1 / status.total_urls) * 100;
+      const estimatedLive = baseProgress + (nextItemWeight * itemProgressRatio);
+
+      setLiveProgress(Math.min(estimatedLive, 99.99));
+    }, 100);
+
+    return () => clearInterval(interval);
+  }, [status]);
 
   const [targetLanguage, setTargetLanguage] = useState('en');
   const [list, setList] = useState([]);
@@ -980,7 +1053,7 @@ export default function BulkUpload() {
                     <Box sx={{ textAlign: 'center' }}>
                       <Typography variant="body2" sx={{ color: THEME.textSecondary, mb: 1 }}>Progress</Typography>
                       <Typography variant="h4" sx={{ color: THEME.success, fontWeight: 700 }}>
-                        {status.progress_percentage}%
+                        {liveProgress.toFixed(2)}%
                       </Typography>
                     </Box>
                   </Grid>
@@ -1011,7 +1084,7 @@ export default function BulkUpload() {
                     {/* Progress Circle (Lime Green) */}
                     <CircularProgress
                       variant="determinate"
-                      value={status.progress_percentage || 0}
+                      value={liveProgress}
                       size={120}
                       thickness={5}
                       sx={{
@@ -1020,7 +1093,7 @@ export default function BulkUpload() {
                         left: 0,
                         '& .MuiCircularProgress-circle': {
                           strokeLinecap: 'round',
-                          transition: 'stroke-dashoffset 1s cubic-bezier(0.4, 0, 0.2, 1)',
+                          transition: 'stroke-dashoffset 0.1s linear',
                         },
                       }}
                     />
@@ -1038,7 +1111,7 @@ export default function BulkUpload() {
                       }}
                     >
                       <Typography variant="h4" component="div" fontWeight="800" sx={{ color: '#FFFFFF' }}>
-                        {status.progress_percentage || 0}<Box component="span" sx={{ fontSize: '1rem', ml: 0.5 }}>%</Box>
+                        {liveProgress.toFixed(2)}<Box component="span" sx={{ fontSize: '1rem', ml: 0.5 }}>%</Box>
                       </Typography>
                     </Box>
                   </Box>
@@ -1046,10 +1119,16 @@ export default function BulkUpload() {
                     color: status.status === 'failed' ? THEME.error : '#A3E635', 
                     fontWeight: 700, 
                     letterSpacing: '1px', 
-                    textTransform: 'uppercase' 
+                    textTransform: 'uppercase',
+                    mb: status.status === 'processing' ? 1 : 0
                   }}>
                     {status.status === 'completed' ? 'BATCH COMPLETE' : status.status?.toUpperCase()}
                   </Typography>
+                  {status.status === 'processing' && (
+                    <Typography variant="caption" sx={{ color: '#FFFFFF', opacity: 0.8, fontWeight: 500 }}>
+                      ⏱️ Est. Time Remaining: {getExpectedTimeRemaining()}
+                    </Typography>
+                  )}
                 </Box>
 
                 {/* Current URL */}

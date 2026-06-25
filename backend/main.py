@@ -201,6 +201,8 @@ class BatchStatusResponse(BaseModel):
     progress_percentage: float
     current_url: Optional[str] = None
     can_cancel: bool = False
+    started_at: Optional[dt] = None
+    created_at: Optional[dt] = None
 
 # --- Dashboard Models - SIMPLIFIED ---
 class DealerSummary(BaseModel):
@@ -2286,7 +2288,9 @@ async def get_bulk_status(batch_id: str, current_user: UserInDB = Depends(get_cu
         "failed_urls": batch.get("failed_urls", 0),
         "progress_percentage": round(progress, 2),
         "current_url": batch.get("current_url"),
-        "can_cancel": can_cancel
+        "can_cancel": can_cancel,
+        "started_at": batch.get("started_at"),
+        "created_at": batch.get("created_at")
     }
 
 @app.get("/bulk-results/{batch_id}")
