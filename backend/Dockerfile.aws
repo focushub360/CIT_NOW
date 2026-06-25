@@ -7,10 +7,11 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     HF_HOME=/app/cache \
     TRANSFORMERS_CACHE=/app/cache
 
-# Install system dependencies including FFmpeg and git
+# Install system dependencies including FFmpeg, git, and ca-certificates
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     git \
+    ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory

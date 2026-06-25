@@ -241,7 +241,8 @@ export default function BulkUpload() {
   const handleFileUpload = (event) => {
     const selectedFile = event.target.files?.[0];
     if (!selectedFile) return;
-    if (selectedFile.name.endsWith('.xlsx') || selectedFile.name.endsWith('.xls')) {
+    const nameLower = selectedFile.name.toLowerCase();
+    if (nameLower.endsWith('.xlsx') || nameLower.endsWith('.xls')) {
       setFile(selectedFile);
       setError('');
       setExcelPreview({
@@ -651,29 +652,35 @@ export default function BulkUpload() {
                 <Table size="small">
                   <TableHead>
                     <TableRow sx={{ backgroundColor: THEME.surface }}>
-                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>OEM Code</TableCell>
-                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Location</TableCell>
-                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Video URL</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Video ID</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Location Name</TableCell>
                       <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Vehicle ID</TableCell>
-                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Customer Name</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>VIN</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>VP Display Name</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Excluded from Stats</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>Vehicle Make</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>New/Used</TableCell>
+                      <TableCell sx={{ fontWeight: 600, color: THEME.textPrimary }}>date</TableCell>
                     </TableRow>
                   </TableHead>
                   <TableBody>
                     <TableRow>
-                      <TableCell sx={{ color: THEME.textSecondary }}>38536</TableCell>
-                      <TableCell sx={{ color: THEME.textSecondary }}>Kun Motoren Private Limited</TableCell>
-                      <TableCell sx={{ color: THEME.textSecondary, fontFamily: 'monospace', fontSize: '0.75rem' }}>
-                        https://video.qualitylens.co.uk/...
-                      </TableCell>
-                      <TableCell sx={{ color: THEME.textSecondary }}>TS09FW4707</TableCell>
-                      <TableCell sx={{ color: THEME.textSecondary }}>Vehicle</TableCell>
+                      <TableCell sx={{ color: THEME.textSecondary }}>823723</TableCell>
+                      <TableCell sx={{ color: THEME.textSecondary }}>Eminent Cars Private Limited</TableCell>
+                      <TableCell sx={{ color: THEME.textSecondary }}>HP 47B 1213</TableCell>
+                      <TableCell sx={{ color: THEME.textSecondary }}>NA</TableCell>
+                      <TableCell sx={{ color: THEME.textSecondary }}>Pre Delivery</TableCell>
+                      <TableCell sx={{ color: THEME.textSecondary }}>0</TableCell>
+                      <TableCell sx={{ color: THEME.textSecondary }}>BMW</TableCell>
+                      <TableCell sx={{ color: THEME.textSecondary }}></TableCell>
+                      <TableCell sx={{ color: THEME.textSecondary, whiteSpace: 'nowrap' }}>08-06-2026 20:31</TableCell>
                     </TableRow>
                   </TableBody>
                 </Table>
               </TableContainer>
               
               <Typography variant="body2" sx={{ color: THEME.textTertiary, mt: 2, fontStyle: 'italic' }}>
-                💡 The system automatically detects columns containing video URLs. Ensure your Excel file has at least one column with valid QualityLens URLs.
+                💡 The system automatically detects columns containing Video IDs or full CitNow URLs. Ensure your Excel file has at least one column with valid IDs or URLs.
               </Typography>
             </CardContent>
           </Card>
@@ -729,7 +736,7 @@ export default function BulkUpload() {
                   disabled={!!batchId && canStopBatch(status?.status)}
                 >
                   Choose Excel File
-                  <input type="file" hidden accept=".xlsx,.xls" onChange={handleFileUpload}
+                  <input type="file" hidden accept=".xlsx,.xls,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel" onChange={handleFileUpload}
                     disabled={!!batchId && canStopBatch(status?.status)} />
                 </Button>
 

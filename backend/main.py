@@ -1284,6 +1284,14 @@ async def process_single_analysis_task(
             raise Exception("Analysis returned empty results without an error message.")
         
         # Store results
+        # Restore created_at as datetime object for MongoDB Date storage compatibility
+        if "created_at" in processed_results and isinstance(processed_results["created_at"], str):
+            try:
+                processed_results["created_at"] = dt.fromisoformat(processed_results["created_at"])
+            except Exception:
+                processed_results["created_at"] = dt.utcnow()
+        elif "created_at" not in processed_results:
+            processed_results["created_at"] = dt.utcnow()
         res = await results_collection.insert_one(processed_results.copy())
         result_id = str(res.inserted_id)
         
@@ -1407,7 +1415,9 @@ async def _process_single_video_in_thread(video_input: str, transcription_langua
     loop = asyncio.get_running_loop()
 
     def blocking_analysis():
-        with contextlib.redirect_stdout(_io.StringIO()), contextlib.redirect_stderr(_io.StringIO()):
+        stdout_buf = _io.StringIO()
+        stderr_buf = _io.StringIO()
+        with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf):
             try:
                 return analyzer.process_video(
                     video_input,
@@ -1415,7 +1425,13 @@ async def _process_single_video_in_thread(video_input: str, transcription_langua
                     target_language_short=target_language
                 )
             except Exception as e:
+                stdout_val = stdout_buf.getvalue()
+                stderr_val = stderr_buf.getvalue()
                 logger.error(f"Internal analyzer error for {video_input}: {e}", exc_info=True)
+                if stdout_val:
+                    logger.error(f"Captured stdout during failure for {video_input}:\n{stdout_val}")
+                if stderr_val:
+                    logger.error(f"Captured stderr during failure for {video_input}:\n{stderr_val}")
                 raise
 
     try:
@@ -1456,6 +1472,28 @@ async def _store_excel_data_in_chunks(batch_id: str, filename: str, df: pd.DataF
     except Exception:
         logger.exception("Could not store Excel data for batch %s.", batch_id)
 
+async def _get_excel_row_metadata(batch_id: str, index: int) -> Optional[dict]:
+    """
+    Retrieves the exact row metadata dictionary from excel_data_collection
+    based on batch_id and 0-based row index.
+    """
+    if excel_data_collection is None:
+        return None
+    try:
+        chunk_index = index // 1000
+        local_index = index % 1000
+        chunk_doc = await excel_data_collection.find_one({
+            "batch_id": batch_id,
+            "chunk_index": chunk_index
+        })
+        if chunk_doc and "data" in chunk_doc:
+            data = chunk_doc["data"]
+            if 0 <= local_index < len(data):
+                return data[local_index]
+    except Exception as e:
+        logger.error(f"Error fetching Excel row metadata for batch {batch_id} at index {index}: {e}")
+    return None
+
 async def _process_single_batch_url_item(
     batch_id: str, 
     url: str, 
@@ -1489,6 +1527,71 @@ async def _process_single_batch_url_item(
             logger.error(f"Empty results for batch item {order}")
             return False
         
+        # Add batch identifiers and target language
+        processed_results["batch_id"] = batch_id
+        processed_results["processing_order"] = order
+        processed_results["target_language"] = target_language
+
+        # Restore created_at as datetime object for MongoDB Date storage compatibility
+        if "created_at" in processed_results and isinstance(processed_results["created_at"], str):
+            try:
+                processed_results["created_at"] = dt.fromisoformat(processed_results["created_at"])
+            except Exception:
+                processed_results["created_at"] = dt.utcnow()
+        elif "created_at" not in processed_results:
+            processed_results["created_at"] = dt.utcnow()
+
+        # Merge Excel row metadata and populate fields
+        excel_row = await _get_excel_row_metadata(batch_id, order - 1)
+        if excel_row:
+            excel_row_cleaned = clean_results(excel_row)
+            processed_results["excel_metadata"] = excel_row_cleaned
+            
+            if "citnow_metadata" not in processed_results or not isinstance(processed_results["citnow_metadata"], dict):
+                processed_results["citnow_metadata"] = {}
+            meta = processed_results["citnow_metadata"]
+            
+            mapping = {
+                "Location Name": "dealership",
+                "Vehicle ID": "vehicle",
+                "VIN": "vin",
+                "date": "date",
+                "Vehicle Make": "brand",
+                "VP Display Name": "vp_display_name",
+                "Excluded from Stats": "excluded_from_stats",
+                "New/Used": "new_used"
+            }
+            for excel_key, meta_key in mapping.items():
+                val = None
+                for k, v in excel_row_cleaned.items():
+                    if k.strip().lower() == excel_key.lower():
+                        val = v
+                        break
+                if val is not None and val != "":
+                    meta[meta_key] = val
+            
+            processed_results["citnow_dealership"] = meta.get("dealership")
+            processed_results["citnow_vehicle"] = meta.get("vehicle")
+            processed_results["citnow_registration"] = meta.get("registration") or meta.get("vehicle")
+            processed_results["citnow_vin"] = meta.get("vin")
+            processed_results["citnow_brand"] = meta.get("brand")
+            
+            excel_date = meta.get("date")
+            if excel_date:
+                try:
+                    parsed_dt = None
+                    for fmt in ("%d-%m-%Y %H:%M", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M", "%Y/%m/%d %H:%M"):
+                        try:
+                            parsed_dt = datetime.strptime(str(excel_date).strip(), fmt)
+                            break
+                        except ValueError:
+                            continue
+                    if parsed_dt:
+                        processed_results["created_at"] = parsed_dt
+                        processed_results["processing_timestamp"] = parsed_dt.isoformat()
+                except Exception as ex:
+                    logger.debug(f"Failed to parse Excel date string {excel_date}: {ex}")
+
         await results_collection.insert_one(processed_results)
 
         await batch_collection.update_one(
@@ -1512,11 +1615,63 @@ async def _process_single_batch_url_item(
             "processing_order": order,
             "transcription_language": transcription_language,
             "target_language_used": target_language,
+            "target_language": target_language,
             "status": BatchStatus.FAILED,
             "created_at": dt.utcnow(),
             "submitted_by_user_id": submitted_by_user_id,
             "dealer_id": dealer_id
         }
+
+        # Merge Excel row metadata and populate fields for failed item
+        excel_row = await _get_excel_row_metadata(batch_id, order - 1)
+        if excel_row:
+            excel_row_cleaned = clean_results(excel_row)
+            error_doc["excel_metadata"] = excel_row_cleaned
+            
+            if "citnow_metadata" not in error_doc or not isinstance(error_doc["citnow_metadata"], dict):
+                error_doc["citnow_metadata"] = {}
+            meta = error_doc["citnow_metadata"]
+            
+            mapping = {
+                "Location Name": "dealership",
+                "Vehicle ID": "vehicle",
+                "VIN": "vin",
+                "date": "date",
+                "Vehicle Make": "brand",
+                "VP Display Name": "vp_display_name",
+                "Excluded from Stats": "excluded_from_stats",
+                "New/Used": "new_used"
+            }
+            for excel_key, meta_key in mapping.items():
+                val = None
+                for k, v in excel_row_cleaned.items():
+                    if k.strip().lower() == excel_key.lower():
+                        val = v
+                        break
+                if val is not None and val != "":
+                    meta[meta_key] = val
+                    
+            error_doc["citnow_dealership"] = meta.get("dealership")
+            error_doc["citnow_vehicle"] = meta.get("vehicle")
+            error_doc["citnow_registration"] = meta.get("registration") or meta.get("vehicle")
+            error_doc["citnow_vin"] = meta.get("vin")
+            error_doc["citnow_brand"] = meta.get("brand")
+            
+            excel_date = meta.get("date")
+            if excel_date:
+                try:
+                    parsed_dt = None
+                    for fmt in ("%d-%m-%Y %H:%M", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M", "%Y/%m/%d %H:%M"):
+                        try:
+                            parsed_dt = datetime.strptime(str(excel_date).strip(), fmt)
+                            break
+                        except ValueError:
+                            continue
+                    if parsed_dt:
+                        error_doc["created_at"] = parsed_dt
+                except Exception:
+                    pass
+
         await results_collection.insert_one(error_doc)
         
         await batch_collection.update_one(
@@ -1538,11 +1693,63 @@ async def _process_single_batch_url_item(
             "processing_order": order,
             "transcription_language": transcription_language,
             "target_language_used": target_language,
+            "target_language": target_language,
             "status": BatchStatus.FAILED,
             "created_at": dt.utcnow(),
             "submitted_by_user_id": submitted_by_user_id,
             "dealer_id": dealer_id
         }
+
+        # Merge Excel row metadata and populate fields for failed item
+        excel_row = await _get_excel_row_metadata(batch_id, order - 1)
+        if excel_row:
+            excel_row_cleaned = clean_results(excel_row)
+            error_doc["excel_metadata"] = excel_row_cleaned
+            
+            if "citnow_metadata" not in error_doc or not isinstance(error_doc["citnow_metadata"], dict):
+                error_doc["citnow_metadata"] = {}
+            meta = error_doc["citnow_metadata"]
+            
+            mapping = {
+                "Location Name": "dealership",
+                "Vehicle ID": "vehicle",
+                "VIN": "vin",
+                "date": "date",
+                "Vehicle Make": "brand",
+                "VP Display Name": "vp_display_name",
+                "Excluded from Stats": "excluded_from_stats",
+                "New/Used": "new_used"
+            }
+            for excel_key, meta_key in mapping.items():
+                val = None
+                for k, v in excel_row_cleaned.items():
+                    if k.strip().lower() == excel_key.lower():
+                        val = v
+                        break
+                if val is not None and val != "":
+                    meta[meta_key] = val
+                    
+            error_doc["citnow_dealership"] = meta.get("dealership")
+            error_doc["citnow_vehicle"] = meta.get("vehicle")
+            error_doc["citnow_registration"] = meta.get("registration") or meta.get("vehicle")
+            error_doc["citnow_vin"] = meta.get("vin")
+            error_doc["citnow_brand"] = meta.get("brand")
+            
+            excel_date = meta.get("date")
+            if excel_date:
+                try:
+                    parsed_dt = None
+                    for fmt in ("%d-%m-%Y %H:%M", "%Y-%m-%d %H:%M", "%d/%m/%Y %H:%M", "%Y/%m/%d %H:%M"):
+                        try:
+                            parsed_dt = datetime.strptime(str(excel_date).strip(), fmt)
+                            break
+                        except ValueError:
+                            continue
+                    if parsed_dt:
+                        error_doc["created_at"] = parsed_dt
+                except Exception:
+                    pass
+
         await results_collection.insert_one(error_doc)
         
         await batch_collection.update_one(
@@ -1800,17 +2007,28 @@ async def create_bulk_analysis(
                 break
 
         urls: list[str] = []
+        non_empty_urls = []
         if url_column is not None and url_column in df.columns:
-            series = df[url_column]
-            try:
-                series = series.astype(str).str.strip()
-            except Exception:
-                series = series.astype(str)
-            urls = series.dropna().unique().tolist()
-            urls = [u for u in urls if isinstance(u, str) and u.strip().startswith(("http://", "https://"))]
+            for _, row in df.iterrows():
+                val = row.get(url_column)
+                if pd.isna(val):
+                    urls.append("")
+                    continue
+                val_str = str(val).strip()
+                if not val_str or val_str.lower() in ('nan', 'none', 'null', 'na'):
+                    urls.append("")
+                elif val_str.startswith(("http://", "https://")):
+                    urls.append(val_str)
+                    non_empty_urls.append(val_str)
+                else:
+                    if val_str.endswith(".0"):
+                        val_str = val_str[:-2]
+                    reconstructed = f"https://southasia.citnow.com/vid/{val_str}"
+                    urls.append(reconstructed)
+                    non_empty_urls.append(reconstructed)
 
-        # Fallback: pick the column with the most http-links if nothing found
-        if not urls:
+        # Fallback: pick the column with the most http-links if nothing found or if no valid items matched
+        if not url_column or not non_empty_urls:
             best_col = None
             best_count = 0
             for col in df.columns:
@@ -1823,17 +2041,31 @@ async def create_bulk_analysis(
                     best_count = count
                     best_col = col
             if best_col is not None and best_count > 0:
-                try:
-                    urls = df[best_col].astype(str).str.strip().tolist()
-                except Exception:
-                    urls = df[best_col].astype(str).tolist()
-                urls = [u for u in urls if isinstance(u, str) and u.strip().startswith(("http://", "https://"))]
                 url_column = best_col
+                urls = []
+                non_empty_urls = []
+                for _, row in df.iterrows():
+                    val = row.get(url_column)
+                    if pd.isna(val):
+                        urls.append("")
+                        continue
+                    val_str = str(val).strip()
+                    if not val_str or val_str.lower() in ('nan', 'none', 'null', 'na'):
+                        urls.append("")
+                    elif val_str.startswith(("http://", "https://")):
+                        urls.append(val_str)
+                        non_empty_urls.append(val_str)
+                    else:
+                        if val_str.endswith(".0"):
+                            val_str = val_str[:-2]
+                        reconstructed = f"https://southasia.citnow.com/vid/{val_str}"
+                        urls.append(reconstructed)
+                        non_empty_urls.append(reconstructed)
 
-        if not urls:
-            raise HTTPException(status_code=400, detail="No valid URLs found in the Excel file. Ensure a column contains full http(s) links.")
+        if not non_empty_urls:
+            raise HTTPException(status_code=400, detail="No valid URLs or Video IDs found in the Excel file.")
 
-        logger.info("Found %d unique URLs to process", len(urls))
+        logger.info("Found %d rows, processing %d URLs/IDs", len(df), len(urls))
 
         batch_job = {
             "status": BatchStatus.PENDING,
@@ -1853,7 +2085,7 @@ async def create_bulk_analysis(
         inserted = await batch_collection.insert_one(batch_job)
         batch_id = str(inserted.inserted_id)
         
-        logger.info(f"Created new batch: {batch_id} with {len(urls)} URLs by user {current_user.username}.")
+        logger.info(f"Created new batch: {batch_id} with {len(urls)} rows by user {current_user.username}.")
 
         batch_cancellation_flags[batch_id] = False
         await _store_excel_data_in_chunks(batch_id, file.filename, df)
@@ -1872,7 +2104,7 @@ async def create_bulk_analysis(
             "success": True, 
             "batch_id": batch_id, 
             "total_urls": len(urls), 
-            "message": f"Batch processing started for {len(urls)} URLs."
+            "message": f"Batch processing started for {len(urls)} items."
         }
         
     except HTTPException:

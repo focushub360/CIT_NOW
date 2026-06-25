@@ -125,8 +125,11 @@ class UnifiedMediaAnalyzer:
     def extract_citnow_metadata(self, url):
         print("🌐 Extracting CitNow page metadata...")
         try:
-            headers = {"User-Agent": "Mozilla/5.0"}
-            response = requests.get(url, headers=headers)
+            headers = {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8"
+            }
+            response = self._make_request_with_fallback("GET", url, headers=headers)
             if response.status_code == 404:
                 print("⚠️ HTML page returned 404, but video might still be accessible")
             # Extract basic info from URL
@@ -368,6 +371,41 @@ class UnifiedMediaAnalyzer:
             url = "https://" + url
         return url
 
+    def _make_request_with_fallback(self, method, url, **kwargs):
+        """
+        Helper method to make a requests call (GET or HEAD) with standard robust headers
+        and automatic retry without SSL verification if SSLError occurs.
+        """
+        headers = kwargs.get("headers", {})
+        if not headers:
+            headers = {}
+        if "User-Agent" not in headers or headers["User-Agent"] == "Mozilla/5.0":
+            headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        kwargs["headers"] = headers
+        
+        if "timeout" not in kwargs:
+            kwargs["timeout"] = 15
+
+        try:
+            if method.upper() == "GET":
+                return requests.get(url, **kwargs)
+            elif method.upper() == "HEAD":
+                return requests.head(url, **kwargs)
+            else:
+                raise ValueError(f"Unsupported method: {method}")
+        except (requests.exceptions.SSLError, requests.exceptions.ConnectionError) as ssl_err:
+            print(f"⚠️ SSL or Connection Error occurred: {ssl_err}. Retrying with verify=False...")
+            kwargs["verify"] = False
+            import urllib3
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            
+            if method.upper() == "GET":
+                return requests.get(url, **kwargs)
+            elif method.upper() == "HEAD":
+                return requests.head(url, **kwargs)
+            else:
+                raise
+
     def download_citnow_video(self, url):
         print("📥 DOWNLOADING: Enhanced download with correct video UUID...")
 
@@ -391,7 +429,7 @@ class UnifiedMediaAnalyzer:
         print(f"🎯 Using video URL: {video_url}")
 
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
             "Referer": url,
             "Accept": "video/mp4,video/webm,video/*;q=0.9,*/*;q=0.8",
         }
@@ -400,14 +438,14 @@ class UnifiedMediaAnalyzer:
             print(f"🔗 Downloading from: {video_url}")
             
             # Test if URL is accessible first
-            head_response = requests.head(video_url, headers=headers, timeout=10)
+            head_response = self._make_request_with_fallback("HEAD", video_url, headers=headers, timeout=10)
             print(f"📊 Pre-check status: {head_response.status_code}")
             
             if head_response.status_code == 404:
                 raise Exception(f"Video URL returns 404: {video_url}")
             
             # Download the video
-            response = requests.get(video_url, headers=headers, stream=True, timeout=30)
+            response = self._make_request_with_fallback("GET", video_url, headers=headers, stream=True, timeout=30)
             response.raise_for_status()
             
             # Create temp file
@@ -1642,6 +1680,8 @@ class UnifiedMediaAnalyzer:
             print("-" * 40)
 
             audio_path = self.extract_audio_from_video(video_path)
+            if audio_path:
+                temp_files_to_clean.append(audio_path)
 
             if not audio_path:
                 raise ValueError("Audio extraction failed. Cannot proceed.")
@@ -1777,9 +1817,11 @@ class UnifiedMediaAnalyzer:
     def _download_from_url(self, url, headers=None):
         try:
             if headers is None:
-                headers = {"User-Agent": "Mozilla/5.0"}
+                headers = {
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                }
                 
-            response = requests.get(url, stream=True, headers=headers)
+            response = self._make_request_with_fallback("GET", url, stream=True, headers=headers)
             response.raise_for_status()
             
             ext = self._get_file_extension(url, response.headers.get("content-type", ""))
@@ -1827,11 +1869,18 @@ class UnifiedMediaAnalyzer:
         report.append("=" * 80)
         report.append("COMPREHENSIVE VIDEO ANALYSIS REPORT")
         report.append("=" * 80)
-        report.append(f"Generated: {results['processing_timestamp']}")
-        report.append(f"Target Language: {results['target_language'].upper()}")
-        report.append(f"Processing Steps: {', '.join(results['processing_steps'])}")
+        report.append(f"Generated: {results.get('processing_timestamp', '')}")
+        report.append(f"Target Language: {results.get('target_language', results.get('target_language_used', 'EN')).upper()}")
+        report.append(f"Processing Steps: {', '.join(results.get('processing_steps', []))}")
         report.append("")
         
+        if "excel_metadata" in results and results["excel_metadata"]:
+            report.append("EXCEL UPLOAD METADATA")
+            report.append("-" * 60)
+            for k, v in results["excel_metadata"].items():
+                report.append(f"{k}: {v if v is not None else 'N/A'}")
+            report.append("")
+
         if "citnow_metadata" in results:
             report.append("CITNOW SERVICE INFORMATION")
             report.append("-" * 60)

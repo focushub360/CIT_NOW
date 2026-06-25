@@ -10,7 +10,7 @@ import {
   Vibration, VolumeUp, VolumeOff, Warning, CheckCircle, Score, Visibility, ArrowBack,
   Delete as DeleteIcon, FileDownload as FileDownloadIcon, Search as SearchIcon,
   FilterList, Refresh, Analytics, TrendingUp, Star, Assessment, Dashboard as DashboardIcon,
-  PieChart, Timeline, Speed, Group, VideoLibrary, EmojiEvents, PictureAsPdf
+  PieChart, Timeline, Speed, Group, VideoLibrary, EmojiEvents, PictureAsPdf, TableChart
 } from '@mui/icons-material';
 import api from '../../services/api';
 import { getDealerUserStats } from '../../services/dealer_user';
@@ -422,12 +422,22 @@ export default function Results() {
       return;
     }
 
+    // Determine all unique keys inside excel_metadata across filteredRows
+    const allExcelKeysSet = new Set();
+    filteredRows.forEach(r => {
+      if (r.excel_metadata && typeof r.excel_metadata === 'object') {
+        Object.keys(r.excel_metadata).forEach(k => allExcelKeysSet.add(k));
+      }
+    });
+    const excelKeys = Array.from(allExcelKeysSet);
+
     const headers = [
       'Dealership',
       'Vehicle/Registration',
       'VIN',
       'Email',
       'Phone',
+      ...excelKeys,
       'Video Score',
       'Audio Score',
       'Overall Score',
@@ -455,12 +465,16 @@ export default function Results() {
       const videoLink = m.page_url || '';
       const id = r._id;
 
+      // Extract values corresponding to excelKeys
+      const excelValues = excelKeys.map(k => (r.excel_metadata ? r.excel_metadata[k] : ''));
+
       const row = [
         m.dealership || '',
         vehicleReg,
         vin,
         email,
         phone,
+        ...excelValues,
         vidScore,
         audScore,
         overall,
@@ -472,7 +486,7 @@ export default function Results() {
         id
       ];
 
-      return row.map(cell => `"${('' + cell).replace(/"/g, '""')}"`).join(',');
+      return row.map(cell => `"${(cell !== null && cell !== undefined ? '' + cell : '').replace(/"/g, '""')}"`).join(',');
     });
 
     const csv = [headers.join(','), ...lines].join('\r\n');
@@ -1537,6 +1551,67 @@ export default function Results() {
                     </Card>
                   </Grid>
                 </Grid>
+
+                {selectedResult.excel_metadata && Object.keys(selectedResult.excel_metadata).length > 0 && (
+                  <Grid container spacing={3} sx={{ mb: 4 }}>
+                    <Grid item xs={12}>
+                      <Card sx={{
+                        background: THEME.surfaceElevated,
+                        border: `1px solid ${THEME.border}`,
+                        borderRadius: 3,
+                        boxShadow: THEME.shadowSm
+                      }}>
+                        <CardContent sx={{ p: 3 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
+                            <TableChart sx={{
+                              fontSize: 28,
+                              color: THEME.primary,
+                              mr: 2
+                            }} />
+                            <Typography variant="h6" sx={{
+                              color: THEME.textPrimary,
+                              fontWeight: 600
+                            }}>
+                              Excel Upload Metadata
+                            </Typography>
+                          </Box>
+
+                          <Grid container spacing={2}>
+                            {Object.entries(selectedResult.excel_metadata).map(([key, val]) => (
+                              <Grid item xs={12} sm={6} md={4} key={key}>
+                                <Box sx={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  p: 2,
+                                  background: THEME.surface,
+                                  borderRadius: 2,
+                                  border: `1px solid ${THEME.borderLight}`
+                                }}>
+                                  <Box sx={{ flex: 1 }}>
+                                    <Typography variant="caption" sx={{
+                                      color: THEME.textSecondary,
+                                      fontWeight: 500,
+                                      display: 'block',
+                                      mb: 0.5
+                                    }}>
+                                      {key}
+                                    </Typography>
+                                    <Typography variant="body2" sx={{
+                                      color: THEME.textPrimary,
+                                      fontWeight: 600
+                                    }}>
+                                      {val !== null && val !== undefined && val !== '' ? String(val) : '—'}
+                                    </Typography>
+                                  </Box>
+                                </Box>
+                              </Grid>
+                            ))}
+                          </Grid>
+                        </CardContent>
+                      </Card>
+                    </Grid>
+                  </Grid>
+                )}
 
               {/* Quality Assessment Section */}
               <Box sx={{ mb: 4 }}>
