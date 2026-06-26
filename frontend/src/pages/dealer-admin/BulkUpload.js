@@ -1217,29 +1217,86 @@ export default function BulkUpload() {
                   )}
                 </Box>
 
-                {/* Current URL */}
+                {/* Current URL - Enhanced with URL number */}
                 {status.current_url && (
-                  <Paper 
+                  <Paper
                     elevation={0}
-                    sx={{ 
-                      p: 2, 
+                    sx={{
+                      p: 2,
                       backgroundColor: THEME.surface,
-                      border: `1px solid ${THEME.borderLight}`,
-                      borderRadius: 2
+                      border: `1px solid ${THEME.border}`,
+                      borderRadius: 2,
+                      position: 'relative',
+                      overflow: 'hidden'
                     }}
                   >
-                    <Typography variant="body2" sx={{ color: THEME.textPrimary, fontWeight: 600, mb: 1 }}>
+                    {/* Animated processing indicator line */}
+                    {status.status === 'processing' && (
+                      <Box sx={{
+                        position: 'absolute', top: 0, left: 0, right: 0, height: '2px',
+                        background: `linear-gradient(90deg, transparent 0%, ${THEME.primary} 50%, transparent 100%)`,
+                        animation: 'scanLine 2s linear infinite',
+                        '@keyframes scanLine': {
+                          '0%': { transform: 'translateX(-100%)' },
+                          '100%': { transform: 'translateX(100%)' }
+                        }
+                      }} />
+                    )}
+
+                    {/* URL number badge */}
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1, flexWrap: 'wrap' }}>
+                      <Box sx={{
+                        background: THEME.gradientPrimary,
+                        color: '#fff',
+                        borderRadius: '20px',
+                        px: 1.5, py: 0.3,
+                        fontSize: '0.7rem',
+                        fontWeight: 700,
+                        letterSpacing: '0.5px',
+                        whiteSpace: 'nowrap'
+                      }}>
+                        🔄 URL {status.processed_urls + status.failed_urls + 1} of {status.total_urls}
+                      </Box>
+                      {status.failed_urls > 0 && (
+                        <Box sx={{
+                          background: THEME.error,
+                          color: '#fff',
+                          borderRadius: '20px',
+                          px: 1.5, py: 0.3,
+                          fontSize: '0.7rem',
+                          fontWeight: 700
+                        }}>
+                          ⚠️ {status.failed_urls} Failed
+                        </Box>
+                      )}
+                      {status.processed_urls > 0 && (
+                        <Box sx={{
+                          background: THEME.success,
+                          color: '#fff',
+                          borderRadius: '20px',
+                          px: 1.5, py: 0.3,
+                          fontSize: '0.7rem',
+                          fontWeight: 700
+                        }}>
+                          ✓ {status.processed_urls} Done
+                        </Box>
+                      )}
+                    </Box>
+
+                    <Typography variant="body2" sx={{ color: THEME.textPrimary, fontWeight: 600, mb: 0.5 }}>
                       🎥 Currently Processing:
                     </Typography>
-                    <Typography variant="body2" sx={{ 
-                      color: THEME.textSecondary, 
+                    <Typography variant="body2" sx={{
+                      color: THEME.primary,
                       fontFamily: 'monospace',
-                      wordBreak: 'break-all'
+                      wordBreak: 'break-all',
+                      fontSize: '0.8rem'
                     }}>
                       {status.current_url}
                     </Typography>
                   </Paper>
                 )}
+
 
                 {/* Status Messages */}
                 {status.status === 'completed' && (
