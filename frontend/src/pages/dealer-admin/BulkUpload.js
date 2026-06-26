@@ -1165,77 +1165,197 @@ export default function BulkUpload() {
                   </Grid>
                 </Grid>
 
-                {/* Circular Progress (Modern Styled like NewAnalysis) */}
-                <Box sx={{ 
-                  display: 'flex', 
-                  flexDirection: 'column', 
+                {/* ── NEON PROCESSING DISPLAY ─────────────────────── */}
+                <Box sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  py: 4, 
+                  py: 5,
                   mb: 3,
-                  background: '#0a0a0a',
+                  background: 'radial-gradient(ellipse at center, #0a1628 0%, #030810 70%)',
                   borderRadius: 4,
-                  boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-                  border: '1px solid #222'
+                  border: '1px solid rgba(0,212,255,0.15)',
+                  position: 'relative',
+                  overflow: 'hidden',
+                  // Outer glow on the card itself
+                  boxShadow: status.status === 'processing'
+                    ? '0 0 40px rgba(0,212,255,0.12), 0 0 80px rgba(163,230,53,0.06), inset 0 1px 0 rgba(255,255,255,0.05)'
+                    : '0 10px 30px rgba(0,0,0,0.3)',
                 }}>
-                  <Box sx={{ position: 'relative', display: 'inline-flex', mb: 2 }}>
-                    {/* Background Circle */}
+
+                  {/* Sweeping background beam — always animates */}
+                  {status.status === 'processing' && (
+                    <Box sx={{
+                      position: 'absolute', inset: 0,
+                      background: 'conic-gradient(from 0deg at 50% 50%, transparent 330deg, rgba(0,212,255,0.06) 355deg, transparent 360deg)',
+                      animation: 'beamSpin 3s linear infinite',
+                      '@keyframes beamSpin': { to: { transform: 'rotate(360deg)' } }
+                    }} />
+                  )}
+
+                  {/* Corner sparkle dots */}
+                  {status.status === 'processing' && [
+                    { top: '12%', left: '10%', delay: '0s' },
+                    { top: '12%', right: '10%', delay: '0.6s' },
+                    { bottom: '12%', left: '10%', delay: '1.2s' },
+                    { bottom: '12%', right: '10%', delay: '1.8s' },
+                  ].map((pos, i) => (
+                    <Box key={i} sx={{
+                      position: 'absolute', ...pos,
+                      width: 4, height: 4, borderRadius: '50%',
+                      background: '#00d4ff',
+                      animation: 'sparkle 2s ease-in-out infinite',
+                      animationDelay: pos.delay,
+                      '@keyframes sparkle': {
+                        '0%,100%': { opacity: 0.2, transform: 'scale(0.8)' },
+                        '50%': { opacity: 1, transform: 'scale(1.8)', boxShadow: '0 0 8px #00d4ff' }
+                      }
+                    }} />
+                  ))}
+
+                  {/* Main neon ring container */}
+                  <Box sx={{ position: 'relative', display: 'inline-flex', mb: 2.5 }}>
+
+                    {/* Outermost pulsing glow ring */}
+                    {status.status === 'processing' && (
+                      <Box sx={{
+                        position: 'absolute',
+                        inset: -18,
+                        borderRadius: '50%',
+                        border: '2px solid rgba(0,212,255,0.2)',
+                        animation: 'outerPulse 2s ease-in-out infinite',
+                        '@keyframes outerPulse': {
+                          '0%,100%': { transform: 'scale(1)', opacity: 0.3, borderColor: 'rgba(0,212,255,0.2)' },
+                          '50%': { transform: 'scale(1.06)', opacity: 0.8, borderColor: 'rgba(0,212,255,0.6)', boxShadow: '0 0 20px rgba(0,212,255,0.3)' }
+                        }
+                      }} />
+                    )}
+
+                    {/* Middle glow ring */}
+                    {status.status === 'processing' && (
+                      <Box sx={{
+                        position: 'absolute',
+                        inset: -8,
+                        borderRadius: '50%',
+                        border: '1.5px solid rgba(163,230,53,0.15)',
+                        animation: 'midPulse 2s ease-in-out infinite 0.5s',
+                        '@keyframes midPulse': {
+                          '0%,100%': { opacity: 0.2 },
+                          '50%': { opacity: 0.7, boxShadow: '0 0 12px rgba(163,230,53,0.25)' }
+                        }
+                      }} />
+                    )}
+
+                    {/* Dark track circle */}
                     <CircularProgress
                       variant="determinate"
                       value={100}
-                      size={120}
-                      thickness={4}
-                      sx={{ color: '#222' }}
+                      size={140}
+                      thickness={3}
+                      sx={{ color: 'rgba(255,255,255,0.06)' }}
                     />
-                    {/* Progress Circle (Lime Green) */}
+
+                    {/* Progress arc — neon cyan/green */}
                     <CircularProgress
                       variant="determinate"
-                      value={liveProgress}
-                      size={120}
-                      thickness={5}
+                      value={Math.max(liveProgress, 0.5)}
+                      size={140}
+                      thickness={4}
                       sx={{
-                        color: status.status === 'failed' ? THEME.error : '#A3E635',
+                        color: status.status === 'failed' ? '#ff4444' : '#A3E635',
                         position: 'absolute',
                         left: 0,
+                        filter: status.status === 'processing'
+                          ? 'drop-shadow(0 0 6px #A3E635) drop-shadow(0 0 12px rgba(163,230,53,0.4))'
+                          : 'none',
                         '& .MuiCircularProgress-circle': {
                           strokeLinecap: 'round',
-                          transition: 'stroke-dashoffset 0.1s linear',
+                          transition: 'stroke-dashoffset 0.3s ease',
                         },
                       }}
                     />
-                    <Box
-                      sx={{
-                        top: 0,
-                        left: 0,
-                        bottom: 0,
-                        right: 0,
-                        position: 'absolute',
-                        display: 'flex',
-                        flexDirection: 'column',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                      }}
-                    >
-                      <Typography variant="h4" component="div" fontWeight="800" sx={{ color: '#FFFFFF' }}>
-                        {liveProgress.toFixed(2)}<Box component="span" sx={{ fontSize: '1rem', ml: 0.5 }}>%</Box>
+
+                    {/* Spinning neon arc (always rotates — never looks stuck) */}
+                    {status.status === 'processing' && (
+                      <CircularProgress
+                        variant="indeterminate"
+                        size={140}
+                        thickness={1.5}
+                        sx={{
+                          position: 'absolute',
+                          left: 0,
+                          color: 'rgba(0,212,255,0.5)',
+                          filter: 'drop-shadow(0 0 4px rgba(0,212,255,0.8))',
+                          animationDuration: '2.5s',
+                          '& .MuiCircularProgress-circle': {
+                            strokeLinecap: 'round',
+                            strokeDasharray: '20px, 180px',
+                          },
+                        }}
+                      />
+                    )}
+
+                    {/* Center content */}
+                    <Box sx={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', flexDirection: 'column',
+                      alignItems: 'center', justifyContent: 'center',
+                    }}>
+                      <Typography
+                        variant="h4"
+                        component="div"
+                        fontWeight="900"
+                        sx={{
+                          color: '#FFFFFF',
+                          textShadow: status.status === 'processing'
+                            ? '0 0 10px rgba(163,230,53,0.8), 0 0 20px rgba(163,230,53,0.4)'
+                            : 'none',
+                          lineHeight: 1,
+                          fontSize: '1.6rem',
+                          letterSpacing: '-0.5px',
+                        }}
+                      >
+                        {liveProgress.toFixed(2)}
+                        <Box component="span" sx={{ fontSize: '0.9rem', ml: 0.3, opacity: 0.8 }}>%</Box>
                       </Typography>
                     </Box>
                   </Box>
-                  <Typography variant="caption" sx={{ 
-                    color: status.status === 'failed' ? THEME.error : '#A3E635', 
-                    fontWeight: 700, 
-                    letterSpacing: '1px', 
+
+                  {/* Status label with neon glow */}
+                  <Typography variant="caption" sx={{
+                    color: status.status === 'failed' ? '#ff6b6b'
+                      : status.status === 'completed' ? '#A3E635'
+                      : '#00d4ff',
+                    fontWeight: 800,
+                    letterSpacing: '2px',
                     textTransform: 'uppercase',
-                    mb: status.status === 'processing' ? 1 : 0
+                    fontSize: '0.7rem',
+                    textShadow: status.status === 'processing'
+                      ? '0 0 8px rgba(0,212,255,0.9), 0 0 16px rgba(0,212,255,0.5)'
+                      : 'none',
+                    mb: status.status === 'processing' ? 0.75 : 0,
+                    animation: status.status === 'processing' ? 'labelPulse 2s ease-in-out infinite' : 'none',
+                    '@keyframes labelPulse': {
+                      '0%,100%': { opacity: 0.8 },
+                      '50%': { opacity: 1 }
+                    }
                   }}>
-                    {status.status === 'completed' ? 'BATCH COMPLETE' : status.status?.toUpperCase()}
+                    {status.status === 'completed' ? '✅ BATCH COMPLETE' : `⚡ ${status.status?.toUpperCase()}`}
                   </Typography>
+
                   {status.status === 'processing' && (
-                    <Typography variant="caption" sx={{ color: '#FFFFFF', opacity: 0.8, fontWeight: 500 }}>
-                      ⏱️ Est. Time Remaining: {getExpectedTimeRemaining()}
+                    <Typography variant="caption" sx={{
+                      color: 'rgba(255,255,255,0.55)',
+                      fontWeight: 500,
+                      fontSize: '0.7rem',
+                    }}>
+                      ⏱ Est. Time Remaining: {getExpectedTimeRemaining()}
                     </Typography>
                   )}
                 </Box>
+                {/* ── END NEON DISPLAY ────────────────────────────── */}
+
 
                 {/* Current URL - Enhanced with URL number */}
                 {status.current_url && (
