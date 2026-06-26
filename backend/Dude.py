@@ -1440,8 +1440,10 @@ class UnifiedMediaAnalyzer:
         """Generates a robust summary using BART with chunking for long text and adaptive fallback."""
         self.load_summarization_model()
         text = text.strip()
-        if not text or len(text.split()) < 10:
-            return "Text too short for meaningful summary."
+        if not text:
+            return ""
+        if len(text.split()) < 10:
+            return text
 
         presets = {"short": (20, 60), "medium": (40, 120), "long": (80, 200)}
         min_len, max_len = presets.get(summary_type, presets["medium"])
@@ -1564,7 +1566,7 @@ class UnifiedMediaAnalyzer:
             return f"Translation failed due to model loading error for {LANGUAGE_NAME_LOOKUP.get(actual_target_lang, actual_target_lang)}: {e}"
 
         if len(text.strip()) < 10:
-            return "Input text too short to translate"
+            return text
         if len(text) > 1500:
             text = text[:1500] + "..."
 
