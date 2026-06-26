@@ -1513,6 +1513,12 @@ async def _process_single_batch_url_item(
         return False
 
     try:
+        # Set the current URL in the database before processing starts
+        await batch_collection.update_one(
+            {"_id": ObjectId(batch_id)}, 
+            {"$set": {"current_url": url, "updated_at": dt.utcnow()}}
+        )
+
         processed_results, error = await _run_analysis_pipeline(
             url,
             transcription_language,
@@ -1600,7 +1606,7 @@ async def _process_single_batch_url_item(
             {"_id": ObjectId(batch_id)}, 
             {
                 "$inc": {"processed_urls": 1}, 
-                "$set": {"current_url": url, "updated_at": dt.utcnow()}
+                "$set": {"updated_at": dt.utcnow()}
             }
         )
         logger.info(f"Batch {batch_id}: Successfully processed URL {order} ({url[:50]}...)")
@@ -1680,7 +1686,7 @@ async def _process_single_batch_url_item(
             {"_id": ObjectId(batch_id)}, 
             {
                 "$inc": {"failed_urls": 1}, 
-                "$set": {"current_url": url, "updated_at": dt.utcnow()}
+                "$set": {"updated_at": dt.utcnow()}
             }
         )
         return False
@@ -1758,7 +1764,7 @@ async def _process_single_batch_url_item(
             {"_id": ObjectId(batch_id)}, 
             {
                 "$inc": {"failed_urls": 1}, 
-                "$set": {"current_url": url, "updated_at": dt.utcnow()}
+                "$set": {"updated_at": dt.utcnow()}
             }
         )
         return False

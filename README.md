@@ -69,8 +69,8 @@ Access the application at `http://localhost:3000`.
 ### 2. Backend Deployment
 The backend is optimized for deployment on **Hugging Face Spaces** or any Docker-ready cloud provider.
 
-- **Cloud Instance**: [Hugging Face Space](https://huggingface.co/spaces/bharathan56/citnow-backend)
-- **API Entrypoint**: `https://bharathan56-citnow-backend.hf.space`
+- **Cloud Instance**: AWS EC2 Instance (served via Caddy proxy)
+- **API Entrypoint**: `https://qualitylensfocustech.duckdns.org`
 
 ---
 
@@ -91,7 +91,7 @@ The backend is optimized for deployment on **Hugging Face Spaces** or any Docker
 ## ☁️ Ecosystem URLs
 
 - **Live Application**: [https://videoproject-frontend.pages.dev](https://videoproject-frontend.pages.dev)
-- **API Documentation**: [FastAPI Docs](https://bharathan56-citnow-backend.hf.space/docs)
+- **API Documentation**: [FastAPI Docs](https://qualitylensfocustech.duckdns.org/docs)
 
 ---
 

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_BASE = process.env.REACT_APP_API_URL || 'https://bharathan56-citnow-backend.hf.space';
+const API_BASE = process.env.REACT_APP_API_URL || 'https://qualitylensfocustech.duckdns.org';
 const api = axios.create({ baseURL: API_BASE });
 
 // Dynamically attach token from context

@@ -241,12 +241,25 @@ export default function BulkUpload() {
         : serverBatches;
       setActiveBatches(filtered);
       localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
-      // resume tracking first still-active batch
-      const activeBatch = filtered.find(b => ['processing', 'pending', 'stopping'].includes(b.status));
-      if (activeBatch) {
-        setBatchId(activeBatch.batchId);
-        setStatus(activeBatch);
-        startPolling(activeBatch.batchId);
+      // Look for previously tracked batch ID in localStorage
+      const savedTrackedId = localStorage.getItem('trackedBulkBatchId');
+      let targetBatch = null;
+      if (savedTrackedId) {
+        targetBatch = filtered.find(b => String(b.batchId) === String(savedTrackedId));
+      }
+      
+      // Fallback to first active batch if no saved tracked batch, or if it wasn't found
+      if (!targetBatch) {
+        targetBatch = filtered.find(b => ['processing', 'pending', 'stopping'].includes(b.status));
+      }
+
+      if (targetBatch) {
+        setBatchId(targetBatch.batchId);
+        setStatus(targetBatch);
+        localStorage.setItem('trackedBulkBatchId', targetBatch.batchId);
+        if (['processing', 'pending', 'stopping'].includes(targetBatch.status)) {
+          startPolling(targetBatch.batchId);
+        }
       }
     } catch (err) {
       console.warn('fetchServerBatches failed, will fallback to localStorage', err);
@@ -278,12 +291,24 @@ export default function BulkUpload() {
 
       setActiveBatches(filtered);
 
-      // resume tracking first active batch
-      const activeBatch = filtered.find(b => ['processing', 'pending', 'stopping'].includes(b.status));
-      if (activeBatch) {
-        setBatchId(activeBatch.batchId);
-        setStatus(activeBatch);
-        startPolling(activeBatch.batchId);
+      // Look for previously tracked batch ID in localStorage
+      const savedTrackedId = localStorage.getItem('trackedBulkBatchId');
+      let targetBatch = null;
+      if (savedTrackedId) {
+        targetBatch = filtered.find(b => String(b.batchId) === String(savedTrackedId));
+      }
+      
+      if (!targetBatch) {
+        targetBatch = filtered.find(b => ['processing', 'pending', 'stopping'].includes(b.status));
+      }
+
+      if (targetBatch) {
+        setBatchId(targetBatch.batchId);
+        setStatus(targetBatch);
+        localStorage.setItem('trackedBulkBatchId', targetBatch.batchId);
+        if (['processing', 'pending', 'stopping'].includes(targetBatch.status)) {
+          startPolling(targetBatch.batchId);
+        }
       }
     } catch (err) {
       console.error('Error loading batches from storage:', err);
@@ -350,6 +375,7 @@ export default function BulkUpload() {
       const data = response.data;
       const newBatchId = data.batch_id;
       setBatchId(newBatchId);
+      localStorage.setItem('trackedBulkBatchId', newBatchId);
 
       const initialStatus = {
         batchId: newBatchId,
@@ -572,7 +598,8 @@ export default function BulkUpload() {
   const resumeBatchTracking = (batch) => {
     setBatchId(batch.batchId);
     setStatus(batch);
-    if (['processing', 'pending'].includes(batch.status)) {
+    localStorage.setItem('trackedBulkBatchId', batch.batchId);
+    if (['processing', 'pending', 'stopping'].includes(batch.status)) {
       startPolling(batch.batchId);
     }
   };
@@ -583,6 +610,7 @@ export default function BulkUpload() {
     setFile(null);
     setExcelPreview(null);
     setList([]);
+    localStorage.removeItem('trackedBulkBatchId');
     if (pollingIntervalRef.current) {
       clearInterval(pollingIntervalRef.current);
       pollingIntervalRef.current = null;
@@ -684,30 +712,55 @@ export default function BulkUpload() {
           Track progress in real-time and download comprehensive analysis reports.
         </Typography>
 
-        <Button 
-          startIcon={<History />} 
-          onClick={() => setShowHistory(true)} 
-          variant="outlined"
-          sx={{
-            borderRadius: 3,
-            px: 4,
-            py: 1,
-            fontWeight: 600,
-            borderColor: THEME.primary,
-            color: THEME.primary,
-            '&:hover': {
-              backgroundColor: THEME.primaryUltraLight,
-              borderColor: THEME.primaryDark
-            }
-          }}
-        >
-          View History ({activeBatches.length})
-        </Button>
+        <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2 }}>
+          <Button 
+            startIcon={<History />} 
+            onClick={() => setShowHistory(true)} 
+            variant="outlined"
+            sx={{
+              borderRadius: 3,
+              px: 4,
+              py: 1,
+              fontWeight: 600,
+              borderColor: THEME.primary,
+              color: THEME.primary,
+              '&:hover': {
+                backgroundColor: THEME.primaryUltraLight,
+                borderColor: THEME.primaryDark
+              }
+            }}
+          >
+            View History ({activeBatches.length})
+          </Button>
+
+          {status && (
+            <Button 
+              startIcon={<Upload />} 
+              onClick={clearCurrentBatch} 
+              variant="contained"
+              sx={{
+                borderRadius: 3,
+                px: 4,
+                py: 1,
+                fontWeight: 600,
+                background: THEME.gradientPrimary,
+                color: '#fff',
+                boxShadow: THEME.shadowMd,
+                '&:hover': {
+                  boxShadow: THEME.shadowLg,
+                  background: THEME.gradientPrimary
+                }
+              }}
+            >
+              New Upload
+            </Button>
+          )}
+        </Box>
       </Box>
 
-      <Grid container spacing={4}>
-        {/* Left Column - Upload & Settings */}
-        <Grid item xs={12} lg={6}>
+      <Box sx={{ width: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', mt: 2 }}>
+        {!status ? (
+          <Box sx={{ width: '100%', maxWidth: 800, display: 'flex', flexDirection: 'column', gap: 4 }}>
           {/* Excel Format Guide */}
           <Card sx={{
             background: THEME.surfaceElevated,
@@ -926,12 +979,9 @@ export default function BulkUpload() {
               )}
             </CardContent>
           </Card>
-        </Grid>
-
-        {/* Right Column - Status & Preview */}
-        <Grid item xs={12} lg={6}>
-          {/* Current Status */}
-          {status && (
+        </Box>
+        ) : (
+          <Box sx={{ width: '100%', maxWidth: 650 }}>
             <Card sx={{
               background: THEME.surfaceElevated,
               border: `1px solid ${THEME.border}`,
@@ -1185,11 +1235,9 @@ export default function BulkUpload() {
                 )}
               </CardContent>
             </Card>
-          )}
-
-          
-        </Grid>
-      </Grid>
+          </Box>
+        )}
+      </Box>
 
       {/* History Dialog */}
       <Dialog open={showHistory} onClose={() => setShowHistory(false)} maxWidth="md" fullWidth>
