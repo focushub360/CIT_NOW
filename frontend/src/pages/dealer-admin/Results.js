@@ -173,6 +173,7 @@ export default function Results() {
   const [refreshCounter, setRefreshCounter] = useState(0);
   const [userStats, setUserStats] = useState([]);
   const [dealershipFilter, setDealershipFilter] = useState(''); // '' = All
+  const [dateFilter, setDateFilter] = useState('All Time'); // Date filter
   const [exportAnchor, setExportAnchor] = useState(null); // export dropdown
 
   // Pagination state
@@ -195,11 +196,19 @@ export default function Results() {
 
 
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async (silent = false) => {
+    if (!silent) setLoading(true);
     try {
+      // Check for batchId in the URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const batchId = urlParams.get('batchId');
+      
+      const endpoint = batchId 
+        ? `/results?page=1&per_page=100&batch_id=${batchId}`
+        : `/results?page=1&per_page=100`;
+
       // Load results
-      const res = await api.get('/results?page=1&per_page=100');
+      const res = await api.get(endpoint);
       const data = res.data;
 
       // Handle NEW format securely
@@ -219,10 +228,8 @@ export default function Results() {
       // 🔐 HIERARCHY FILTER: Each user sees only THEIR OWN uploaded analyses
       // Try all possible ID field names from authUser
       const currentUserId = authUser?.id || authUser?._id || authUser?.user_id;
-      console.log('🔐 Results filter - currentUserId:', currentUserId, 'authUser:', authUser);
 
       if (currentUserId && results.length > 0) {
-        const before = results.length;
         results = results.filter(r => {
           const submittedBy = r.submitted_by_user_id
             || r.user_id
@@ -232,8 +239,10 @@ export default function Results() {
             || submittedBy === String(currentUserId)
             || String(submittedBy) === String(currentUserId);
         });
-        console.log(`🔐 Filtered from ${before} → ${results.length} results for user ${authUser?.username}`);
       }
+
+      // Filter out failed videos completely from the dashboard
+      results = results.filter(r => r.status !== 'failed' && !r.error_message);
 
       // Update states safely
       setRows(results);
@@ -243,48 +252,6 @@ export default function Results() {
 
       // Only show current user's own stats - no other users
       setUserStats([]);
-
-      // Compute stats from FILTERED results only
-      if (Array.isArray(results) && results.length > 0) {
-        const validResults = results.filter(r => r.status !== 'failed' && !r.error_message);
-        
-        const avgVideo = validResults.length > 0 
-          ? validResults.reduce((sum, r) => sum + (r.video_analysis?.quality_score || r.video_quality_score || 0), 0) / validResults.length 
-          : 0;
-          
-        const avgAudio = validResults.length > 0 
-          ? validResults.reduce((sum, r) => sum + (r.audio_analysis?.score || r.audio_quality_score || 0), 0) / validResults.length 
-          : 0;
-          
-        const avgOverall = validResults.length > 0 
-          ? validResults.reduce((sum, r) => sum + (r.overall_quality?.overall_score || r.overall_quality_score || 0), 0) / validResults.length 
-          : 0;
-
-        const distribution = { excellent: 0, good: 0, fair: 0, poor: 0 };
-        validResults.forEach(r => {
-          const score = r.overall_quality?.overall_score || r.overall_quality_score || 0;
-          if (score >= 8) distribution.excellent++;
-          else if (score >= 6) distribution.good++;
-          else if (score >= 4) distribution.fair++;
-          else distribution.poor++;
-        });
-
-        setStats({
-          totalResults: results.length,   // keep total count of analyses submitted
-          averageVideoScore: avgVideo,
-          averageAudioScore: avgAudio,
-          averageOverallScore: avgOverall,
-          qualityDistribution: distribution
-        });
-      } else {
-        setStats({
-          totalResults: 0,
-          averageVideoScore: 0,
-          averageAudioScore: 0,
-          averageOverallScore: 0,
-          qualityDistribution: { excellent: 0, good: 0, fair: 0, poor: 0 }
-        });
-      }
 
     } catch (error) {
       console.error('Error loading results:', error);
@@ -298,6 +265,10 @@ export default function Results() {
 
   useEffect(() => {
     loadData();
+    const interval = setInterval(() => {
+      loadData(true);
+    }, 15000);
+    return () => clearInterval(interval);
   }, [refreshCounter]);
 
 
@@ -326,7 +297,14 @@ export default function Results() {
 
     setLoading(true);
     try {
-      const res = await api.get(`/results?page=${currentPageBackend}&per_page=100`);
+      const urlParams = new URLSearchParams(window.location.search);
+      const batchId = urlParams.get('batchId');
+      
+      const endpoint = batchId 
+        ? `/results?page=${currentPageBackend}&per_page=100&batch_id=${batchId}`
+        : `/results?page=${currentPageBackend}&per_page=100`;
+
+      const res = await api.get(endpoint);
       const data = res.data;
       const nextResults = data.results || data || [];
 
@@ -396,6 +374,31 @@ export default function Results() {
     const term = searchTerm.toLowerCase();
     const dm = r.citnow_metadata || {};
     const dealershipMatch = !dealershipFilter || (dm.dealership || '') === dealershipFilter;
+    
+    // Date filter logic
+    let dateMatch = true;
+    if (dateFilter !== 'All Time' && r.created_at) {
+      const rowDate = new Date(r.created_at);
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      if (dateFilter === 'Today') {
+        dateMatch = rowDate >= today;
+      } else if (dateFilter === 'Yesterday') {
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        dateMatch = rowDate >= yesterday && rowDate < today;
+      } else if (dateFilter === 'Last 7 Days') {
+        const last7 = new Date(today);
+        last7.setDate(last7.getDate() - 7);
+        dateMatch = rowDate >= last7;
+      } else if (dateFilter === 'Last 30 Days') {
+        const last30 = new Date(today);
+        last30.setDate(last30.getDate() - 30);
+        dateMatch = rowDate >= last30;
+      }
+    }
+
     const searchMatch = (
       (dm.dealership || '').toLowerCase().includes(term) ||
       (dm.vehicle || dm.registration || '').toLowerCase().includes(term) ||
@@ -403,8 +406,42 @@ export default function Results() {
       (dm.phone || '').toLowerCase().includes(term) ||
       (dm.service_advisor || '').toLowerCase().includes(term)
     );
-    return dealershipMatch && searchMatch;
+    return dealershipMatch && searchMatch && dateMatch;
   });
+
+  // Calculate stats dynamically based on filteredRows
+  useEffect(() => {
+    if (filteredRows.length > 0) {
+      const avgVideo = filteredRows.reduce((sum, r) => sum + (r.video_analysis?.quality_score || r.video_quality_score || 0), 0) / filteredRows.length;
+      const avgAudio = filteredRows.reduce((sum, r) => sum + (r.audio_analysis?.score || r.audio_quality_score || 0), 0) / filteredRows.length;
+      const avgOverall = filteredRows.reduce((sum, r) => sum + (r.overall_quality?.overall_score || r.overall_quality_score || 0), 0) / filteredRows.length;
+
+      const distribution = { excellent: 0, good: 0, fair: 0, poor: 0 };
+      filteredRows.forEach(r => {
+        const score = r.overall_quality?.overall_score || r.overall_quality_score || 0;
+        if (score >= 8) distribution.excellent++;
+        else if (score >= 6) distribution.good++;
+        else if (score >= 4) distribution.fair++;
+        else distribution.poor++;
+      });
+
+      setStats({
+        totalResults: filteredRows.length,
+        averageVideoScore: avgVideo,
+        averageAudioScore: avgAudio,
+        averageOverallScore: avgOverall,
+        qualityDistribution: distribution
+      });
+    } else {
+      setStats({
+        totalResults: 0,
+        averageVideoScore: 0,
+        averageAudioScore: 0,
+        averageOverallScore: 0,
+        qualityDistribution: { excellent: 0, good: 0, fair: 0, poor: 0 }
+      });
+    }
+  }, [filteredRows.length]);
 
   // Get current page data
   const paginatedRows = filteredRows.slice(
@@ -845,6 +882,29 @@ export default function Results() {
                     }
                   }}
                 />
+
+                {/* Date Filter Dropdown */}
+                <TextField
+                  select
+                  size="small"
+                  label="Date Range"
+                  value={dateFilter}
+                  onChange={(e) => { setDateFilter(e.target.value); setPage(0); }}
+                  sx={{
+                    minWidth: 150,
+                    '& .MuiOutlinedInput-root': {
+                      background: THEME.background,
+                      borderRadius: 2,
+                      '&:hover fieldset': { borderColor: THEME.primary },
+                    }
+                  }}
+                >
+                  {['All Time', 'Today', 'Yesterday', 'Last 7 Days', 'Last 30 Days'].map(option => (
+                    <MenuItem key={option} value={option}>
+                      {option === 'All Time' ? '📅 All Time' : option}
+                    </MenuItem>
+                  ))}
+                </TextField>
 
                 {/* Dealership Filter Dropdown */}
                 {dealershipOptions.length > 0 && (
