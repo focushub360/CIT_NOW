@@ -16,6 +16,7 @@ qualitylensfocustech.duckdns.org {
         path /bulk-job*
         path /bulk-download*
         path /bulk-excel-data*
+        path /bulk-results*
         path /results*
         path /dashboard*
         path /docs*
