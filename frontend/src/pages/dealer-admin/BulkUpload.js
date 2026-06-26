@@ -1312,7 +1312,7 @@ export default function BulkUpload() {
                         letterSpacing: '0.5px',
                         whiteSpace: 'nowrap'
                       }}>
-                        🔄 URL {status.processed_urls + status.failed_urls + 1} of {status.total_urls}
+                        🔄 URL {Math.min((status.processed_urls || 0) + (status.failed_urls || 0) + 1, status.total_urls)} of {status.total_urls}
                       </Box>
                       {status.failed_urls > 0 && (
                         <Box sx={{
@@ -1341,7 +1341,7 @@ export default function BulkUpload() {
                     </Box>
 
                     <Typography variant="body2" sx={{ color: THEME.textPrimary, fontWeight: 600, mb: 0.5 }}>
-                      🎥 Currently Processing:
+                      🎥 {status.status === 'completed' ? 'Last Processed URL:' : 'Currently Processing:'}
                     </Typography>
                     <Typography variant="body2" sx={{
                       color: THEME.primary,
@@ -1357,17 +1357,37 @@ export default function BulkUpload() {
 
                 {/* Status Messages */}
                 {status.status === 'completed' && (
-                  <Alert 
-                    severity="success" 
-                    sx={{ 
-                      mt: 2,
-                      borderRadius: 2,
-                      border: `1px solid ${THEME.successLight}`,
-                      backgroundColor: THEME.successLight
-                    }}
-                  >
-                    ✅ Bulk processing completed! Processed: {status.processed_urls} | Failed: {status.failed_urls}
-                  </Alert>
+                  <Box sx={{ mt: 2 }}>
+                    <Alert 
+                      severity="success" 
+                      sx={{ 
+                        borderRadius: 2,
+                        border: `1px solid ${THEME.successLight}`,
+                        backgroundColor: THEME.successLight,
+                        mb: 2
+                      }}
+                    >
+                      ✅ Bulk processing completed! Processed: {status.processed_urls} | Failed: {status.failed_urls}
+                    </Alert>
+                    <Button
+                      variant="contained"
+                      fullWidth
+                      onClick={() => window.location.href = `/dealer/results?batchId=${status.batchId}`}
+                      sx={{
+                        background: THEME.gradientPrimary,
+                        color: '#fff',
+                        fontWeight: 700,
+                        py: 1.5,
+                        borderRadius: 2,
+                        boxShadow: THEME.shadowLg,
+                        '&:hover': {
+                          background: THEME.primaryDark
+                        }
+                      }}
+                    >
+                      VIEW DETAILED RESULTS DASHBOARD
+                    </Button>
+                  </Box>
                 )}
                 
                 {status.status === 'failed' && (
