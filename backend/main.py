@@ -67,7 +67,7 @@ APP_VERSION = "1.0.0"
 
 MAX_WORKERS = int(os.getenv("MAX_WORKERS", "2"))
 CONCURRENCY_LIMIT = int(os.getenv("CONCURRENCY_LIMIT", "2"))
-PROCESS_TIMEOUT_SECONDS = int(os.getenv("PROCESS_TIMEOUT_SECONDS", "900")) # 15 minutes
+PROCESS_TIMEOUT_SECONDS = int(os.getenv("PROCESS_TIMEOUT_SECONDS", "180")) # 3 minutes max per URL (keyframe analysis is fast)
 
 BULK_RESULTS_BASE_DIR = os.getenv("BULK_RESULTS_BASE_DIR", "bulk_analysis_reports")
 os.makedirs(BULK_RESULTS_BASE_DIR, exist_ok=True)
