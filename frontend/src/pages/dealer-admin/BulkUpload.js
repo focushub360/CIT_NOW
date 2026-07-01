@@ -791,7 +791,7 @@ export default function BulkUpload() {
 
   const canStopBatch = (batchStatus) => ['processing', 'pending'].includes(batchStatus);
   const canDeleteBatch = (batchStatus) => ['completed', 'failed', 'cancelled', 'stopping'].includes(batchStatus);
-  const canDownloadResults = (batchStatus) => batchStatus === 'completed';
+  const canDownloadResults = (batchStatus) => ['completed', 'processing', 'failed', 'cancelled', 'stopping'].includes(batchStatus);
 
   return (
     <Container maxWidth="xl" sx={{

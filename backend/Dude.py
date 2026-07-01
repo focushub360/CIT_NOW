@@ -1741,31 +1741,56 @@ class UnifiedMediaAnalyzer:
 
             results["processing_steps"].append("audio_extraction")
 
-            print("\n🎥 ANALYZING VIDEO QUALITY")
-            print("-" * 40)
-            video_analysis = self.analyze_video_quality(video_path)
+            # --- START PARALLEL AUDIO/VIDEO ANALYSIS ---
+            import concurrent.futures
             
-            # Blend Video Quality score with real rating if available
+            def run_video_analysis():
+                return self.analyze_video_quality(video_path)
+                
+            def run_audio_pipeline():
+                audio_res = self.analyze_audio_quality(audio_path)
+                transcription_res = self.transcribe_audio(
+                    audio_path, 
+                    transcription_language=transcription_language,
+                    task='transcribe'
+                )
+                return audio_res, transcription_res
+
+            print("\n⚡ STARTING PARALLEL AUDIO AND VIDEO ANALYSIS PIPELINE...")
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as parallel_executor:
+                video_future = parallel_executor.submit(run_video_analysis)
+                audio_future = parallel_executor.submit(run_audio_pipeline)
+                
+                video_analysis = video_future.result()
+                audio_analysis, transcription = audio_future.result()
+            
+            # --- PROCESS VIDEO ANALYSIS RESULTS ---
             star_rating = results.get("citnow_metadata", {}).get("star_rating")
             if star_rating is not None:
                 real_score = star_rating * 2.0
-                # Blend 50/50 for individual component to keep technical value but align with real rating
                 video_analysis["quality_score"] = round((real_score * 0.5) + (video_analysis["quality_score"] * 0.5), 1)
                 video_analysis["quality_label"] = self._get_quality_label(video_analysis["quality_score"])
                 print(f"⚖️ Adjusted Video Quality with Star Rating ({star_rating}★)")
 
             results["video_analysis"] = video_analysis
             results["processing_steps"].append("video_quality_analysis")
-            print(f"Quality: {results['video_analysis']['quality_label']} ({results['video_analysis']['quality_score']:.1f}/10)")
+            print(f"Video Quality: {results['video_analysis']['quality_label']} ({results['video_analysis']['quality_score']:.1f}/10)")
 
-            print("\n🔊 ANALYZING AUDIO QUALITY")
-            print("-" * 40)
-            results["audio_analysis"] = self.analyze_audio_quality(audio_path)
+            # --- PROCESS AUDIO ANALYSIS RESULTS ---
+            results["audio_analysis"] = audio_analysis
             results["processing_steps"].append("audio_quality_analysis")
-            print(f"Clarity: {results['audio_analysis']['prediction']}")
+            print(f"Audio Clarity: {results['audio_analysis']['prediction']}")
 
-            print("\n📊 CALCULATING OVERALL QUALITY")
-            print("-" * 40)
+            # --- PROCESS TRANSCRIPTION RESULTS ---
+            results["transcription"] = {
+                "text": transcription,
+                "length": len(transcription),
+                "language": transcription_language or "auto-detected",
+            }
+            results["processing_steps"].append("speech_to_text")
+            print(f"✅ Speech-to-text completed ({len(transcription)} characters)")
+
+            # --- CALCULATE OVERALL QUALITY ---
             overall_quality = self.calculate_overall_quality(
                 results["audio_analysis"], 
                 results["video_analysis"],
@@ -1773,23 +1798,7 @@ class UnifiedMediaAnalyzer:
             )
             results["overall_quality"] = overall_quality
             results["processing_steps"].append("overall_quality_assessment")
-            print(f"Overall Quality: {overall_quality['overall_label']} ({overall_quality['overall_score']:.1f}/10)")
-
-            print("\n💬 CONVERTING SPEECH TO TEXT")
-            print("-" * 40)
-            print(f"📝 Transcription language: {transcription_language or 'auto-detection'}")
-            transcription = self.transcribe_audio(
-                audio_path, 
-                transcription_language=transcription_language,
-                task='transcribe'
-            )
-            results["transcription"] = {
-                "text": transcription,
-                "length": len(transcription),
-                "language": transcription_language or "auto-detected",
-            }
-            results["processing_steps"].append("speech_to_text")
-            print(f"✅ Full transcription completed ({len(transcription)} characters)")
+            print(f"Overall Quality Score: {overall_quality['overall_label']} ({overall_quality['overall_score']:.1f}/10)")
 
             print("\n📝 GENERATING SUMMARY")
             print("-" * 40)
