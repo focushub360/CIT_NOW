@@ -2279,10 +2279,10 @@ async def list_all_batches(limit: int = 50, status_filter: Optional[str] = None,
             created_at=batch.get("created_at"),
             updated_at=batch.get("updated_at"),
             filename=batch.get("original_filename", "Unknown"),
-            submitted_by_user_id=batch.get("submitted_by_user_id"),
-            dealer_id=batch.get("dealer_id"),
+            submitted_by_user_id=str(batch.get("submitted_by_user_id")) if batch.get("submitted_by_user_id") is not None else None,
+            dealer_id=str(batch.get("dealer_id")) if batch.get("dealer_id") is not None else None,
             message=f"Batch {str(batch['_id'])} status: {batch.get('status')}"
-))
+        ))
 
     
     return result
